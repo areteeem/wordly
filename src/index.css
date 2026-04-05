@@ -1,0 +1,221 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design system CSS custom properties ── */
+:root {
+  --editor-font-size: 18px;
+  --highlight-color: #a8d8ea;
+}
+html.dark {
+  --highlight-color: #3a6f8f;
+}
+
+/* ── Paper texture background ── */
+body {
+  font-family: 'Patrick Hand', cursive;
+  background-color: #fdfbf7;
+  color: #2d2d2d;
+  background-image: radial-gradient(#e5e0d8 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+html.dark body {
+  background-color: #1e1e1e;
+  color: #e0ddd5;
+  background-image: radial-gradient(#333333 1px, transparent 1px);
+}
+
+html.neutral body {
+  background-color: #f0f0f0;
+  color: #3a3a3a;
+  background-image: radial-gradient(#d8d8d8 1px, transparent 1px);
+}
+
+/* ── Scrollbar styling ── */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: #e5e0d8;
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+  border: 2px solid transparent;
+}
+html.dark ::-webkit-scrollbar-thumb { background-color: #444; }
+
+/* ── TipTap Editor ── */
+.ProseMirror {
+  outline: none;
+  min-height: 300px;
+  font-family: 'Patrick Hand', cursive;
+  font-size: var(--editor-font-size);
+  line-height: 1.8;
+  padding: 1rem;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: rgba(45, 45, 45, 0.35);
+  pointer-events: none;
+  height: 0;
+  font-style: italic;
+}
+html.dark .ProseMirror p.is-editor-empty:first-child::before {
+  color: rgba(224, 221, 213, 0.35);
+}
+
+.ProseMirror h1 { font-family: 'Kalam', cursive; font-weight: 700; font-size: 2em; margin-bottom: 0.5rem; }
+.ProseMirror h2 { font-family: 'Kalam', cursive; font-weight: 700; font-size: 1.5em; margin-bottom: 0.4rem; }
+.ProseMirror h3 { font-family: 'Kalam', cursive; font-weight: 700; font-size: 1.25em; }
+
+.ProseMirror mark {
+  background-color: var(--highlight-color);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+html.dark .ProseMirror mark { background-color: #3a6f8f; color: #e0ddd5; }
+
+.ProseMirror ul { list-style-type: disc; padding-left: 1.5rem; }
+.ProseMirror ol { list-style-type: decimal; padding-left: 1.5rem; }
+
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  border: 2px dashed rgba(45, 45, 45, 0.2);
+  border-radius: 8px;
+  margin: 0.5rem 0;
+}
+.ProseMirror img.ProseMirror-selectednode {
+  outline: 3px solid #2d5da1;
+}
+
+/* ── Resize handle ── */
+.resize-handle {
+  width: 6px;
+  cursor: col-resize;
+  position: relative;
+  flex-shrink: 0;
+  transition: background-color 150ms;
+  z-index: 10;
+}
+.resize-handle:hover,
+.resize-handle:active {
+  background-color: rgba(45, 93, 161, 0.3);
+}
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 32px;
+  background: rgba(45, 45, 45, 0.15);
+  border-radius: 2px;
+}
+.resize-handle:hover::after {
+  background: rgba(45, 93, 161, 0.5);
+}
+
+/* ── Drag & drop ── */
+.folder-drop-target {
+  outline: 3px dashed #2d5da1;
+  outline-offset: -2px;
+  background-color: rgba(45, 93, 161, 0.08) !important;
+}
+
+/* ── Active/pressed button ── */
+.btn-press:active {
+  transform: translate(4px, 4px);
+  box-shadow: none !important;
+}
+
+/* ── Panel slide animations ── */
+.panel-slide-left {
+  animation: slide-from-left 200ms ease-out;
+}
+.panel-slide-right {
+  animation: slide-from-right 200ms ease-out;
+}
+@keyframes slide-from-left {
+  from { transform: translateX(-100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slide-from-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* ── Smooth transitions ── */
+.transition-panel {
+  transition: width 200ms ease, opacity 200ms ease;
+}
+
+/* ── Flash highlight for scroll-to-word ── */
+@keyframes flash-highlight {
+  0% { background-color: rgba(45, 93, 161, 0.35); }
+  100% { background-color: transparent; }
+}
+.flash-highlight {
+  animation: flash-highlight 1.5s ease-out;
+}
+
+/* ── Print styles ── */
+@media print {
+  .no-print { display: none !important; }
+  body { background-image: none !important; background-color: white !important; }
+  .ProseMirror { border: none !important; box-shadow: none !important; }
+}
+
+/* ── Mobile viewport ── */
+@media (max-width: 768px) {
+  .ProseMirror {
+    padding: 0.75rem;
+    font-size: 16px;
+  }
+  /* Stack panels on mobile */
+  .mobile-sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    background: rgba(0, 0, 0, 0.4);
+  }
+  .mobile-sidebar-panel {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    width: 85vw;
+    max-width: 360px;
+    z-index: 50;
+    overflow-y: auto;
+  }
+  .mobile-sidebar-panel.left {
+    left: 0;
+    animation: slide-from-left 0.25s ease-out;
+  }
+  .mobile-sidebar-panel.right {
+    right: 0;
+    animation: slide-from-right 0.25s ease-out;
+  }
+  /* Hide resize handles on mobile */
+  .resize-handle {
+    display: none;
+  }
+}
+
+/* ── Tooltip arrow ── */
+.tooltip-arrow::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid #2d2d2d;
+}
