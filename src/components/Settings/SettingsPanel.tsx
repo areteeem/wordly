@@ -1,9 +1,12 @@
-import { X, Moon, Sun, Monitor } from 'lucide-react'
+import { X, Moon, Sun, Monitor, Settings, Palette, Type } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { Button } from '../ui/Button'
 import { wobblyMd, wobbly } from '../../lib/utils'
 import type { ThemeMode, UIDensity, VocabViewMode, ExportFormat, HighlightBehavior } from '../../types'
 import { LANGUAGES } from '../../types'
+
+const FONT_SIZE_PRESETS = [14, 16, 18, 20, 24, 28, 32, 36, 40]
+const HIGHLIGHT_COLORS = ['#a8d8ea', '#fff3a3', '#ffd6a5', '#c7f9cc', '#f8c4d8', '#d8c4ff']
 
 export function SettingsPanel() {
   const settings = useSettingsStore((s) => s.settings)
@@ -28,12 +31,12 @@ export function SettingsPanel() {
       >
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b-2 border-dashed border-pencil/20 dark:border-pencil-dark/20">
-          <h2
-            className="font-heading text-3xl text-pencil dark:text-pencil-dark"
-            style={{ transform: 'rotate(-1deg)' }}
-          >
-            ⚙️ Settings
-          </h2>
+          <div className="flex items-center gap-2" style={{ transform: 'rotate(-1deg)' }}>
+            <Settings size={24} strokeWidth={2.5} className="text-pencil dark:text-pencil-dark" />
+            <h2 className="font-heading text-3xl text-pencil dark:text-pencil-dark">
+              Settings
+            </h2>
+          </div>
           <button
             onClick={toggleSettings}
             className="text-pencil/60 dark:text-pencil-dark/60 hover:text-marker transition-colors"
@@ -77,12 +80,31 @@ export function SettingsPanel() {
             </SettingRow>
 
             <SettingRow label="Highlight color">
-              <input
-                type="color"
-                value={settings.highlightColor}
-                onChange={(e) => updateSettings({ highlightColor: e.target.value })}
-                className="w-10 h-8 border-2 border-pencil cursor-pointer"
-              />
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 rounded border border-pencil/15 bg-white/70 px-1.5 py-1 dark:border-pencil-dark/15 dark:bg-paper-dark/70">
+                  {HIGHLIGHT_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => updateSettings({ highlightColor: color })}
+                      className={`h-5 w-5 rounded-full border transition-transform hover:scale-110 ${
+                        settings.highlightColor === color ? 'border-pencil dark:border-pencil-dark' : 'border-pencil/20 dark:border-pencil-dark/20'
+                      }`}
+                      style={{ backgroundColor: color }}
+                      title={`Highlight ${color}`}
+                    />
+                  ))}
+                </div>
+                <label className="flex items-center gap-2 font-body text-xs text-pencil/50 dark:text-pencil-dark/50">
+                  <Palette size={14} strokeWidth={2.5} />
+                  <input
+                    type="color"
+                    value={settings.highlightColor}
+                    onChange={(e) => updateSettings({ highlightColor: e.target.value })}
+                    className="h-8 w-10 cursor-pointer border-2 border-pencil"
+                  />
+                </label>
+              </div>
             </SettingRow>
 
             <SettingRow label="Font size">
@@ -90,12 +112,32 @@ export function SettingsPanel() {
                 <input
                   type="range"
                   min={14}
-                  max={24}
+                  max={40}
                   value={settings.fontSize}
                   onChange={(e) => updateSettings({ fontSize: Number(e.target.value) })}
                   className="w-32"
                 />
-                <span className="font-body text-sm w-8">{settings.fontSize}px</span>
+                <span className="font-body text-sm w-10">{settings.fontSize}px</span>
+              </div>
+            </SettingRow>
+
+            <SettingRow label="Font presets">
+              <div className="flex flex-wrap justify-end gap-1.5 max-w-[260px]">
+                {FONT_SIZE_PRESETS.map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => updateSettings({ fontSize: size })}
+                    className={`flex items-center gap-1 rounded border px-2 py-1 font-body text-xs transition-colors ${
+                      settings.fontSize === size
+                        ? 'border-pencil bg-pencil text-white dark:border-pencil-dark dark:bg-pencil-dark dark:text-paper-dark'
+                        : 'border-pencil/15 bg-white dark:border-pencil-dark/15 dark:bg-paper-dark hover:bg-erased dark:hover:bg-erased-dark'
+                    }`}
+                  >
+                    <Type size={12} strokeWidth={2.5} />
+                    {size}
+                  </button>
+                ))}
               </div>
             </SettingRow>
 
@@ -158,6 +200,38 @@ export function SettingsPanel() {
                 onChange={(e) => updateSettings({ dailyGoal: Math.max(0, parseInt(e.target.value) || 0) })}
                 className="font-body text-sm bg-white dark:bg-paper-dark border-2 border-pencil dark:border-pencil-dark px-3 py-1 w-20 outline-none"
                 style={{ borderRadius: wobbly }}
+              />
+            </SettingRow>
+          </Section>
+
+          {/* ── Highlight Popup ── */}
+          <Section title="Highlight Popup">
+            <SettingRow label="Enable popup">
+              <Toggle
+                checked={settings.highlightPopupEnabled}
+                onChange={(v) => updateSettings({ highlightPopupEnabled: v })}
+              />
+            </SettingRow>
+
+            <SettingRow label="Popup delay (ms)">
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min={0}
+                  max={3000}
+                  step={100}
+                  value={settings.highlightPopupDelay}
+                  onChange={(e) => updateSettings({ highlightPopupDelay: Number(e.target.value) })}
+                  className="w-28"
+                />
+                <span className="font-body text-sm w-14">{settings.highlightPopupDelay}ms</span>
+              </div>
+            </SettingRow>
+
+            <SettingRow label="Click to reveal translation">
+              <Toggle
+                checked={settings.revealTranslation}
+                onChange={(v) => updateSettings({ revealTranslation: v })}
               />
             </SettingRow>
           </Section>

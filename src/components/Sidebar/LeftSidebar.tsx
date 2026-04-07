@@ -1,4 +1,16 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  PointerSensor,
+  TouchSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import { CSS } from '@dnd-kit/utilities'
 import {
   FolderOpen,
   FolderPlus,
@@ -10,6 +22,7 @@ import {
   FileText,
   FilePlus,
   GripVertical,
+  X,
 } from 'lucide-react'
 import { useFolderStore } from '../../stores/folderStore'
 import { useDocumentStore } from '../../stores/documentStore'
@@ -44,6 +57,16 @@ export function LeftSidebar() {
   const [draggedDocId, setDraggedDocId] = useState<string | null>(null)
   const [dropTargetFolderId, setDropTargetFolderId] = useState<string | null>(null)
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 8 } }),
+  )
+
+  const draggedDocument = useMemo(
+    () => documents.find((doc) => doc.id === draggedDocId) ?? null,
+    [documents, draggedDocId],
+  )
+
   const toggleFolder = (id: string) => {
     setExpandedFolders((prev) => {
       const next = new Set(prev)
@@ -68,174 +91,110 @@ export function LeftSidebar() {
     setEditingFolderId(null)
   }
 
-  const handleDragStart = (docId: string) => {
-    setDraggedDocId(docId)
-  }
-
-  const handleDragOver = (e: React.DragEvent, folderId: string) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    setDropTargetFolderId(folderId)
-  }
-
-  const handleDragLeave = () => {
-    setDropTargetFolderId(null)
-  }
-
-  const handleDrop = (e: React.DragEvent, folderId: string) => {
-    e.preventDefault()
-    setDropTargetFolderId(null)
-    if (draggedDocId) {
-      const doc = documents.find((d) => d.id === draggedDocId)
-      if (doc && doc.folderId !== folderId) {
-        moveDocument(draggedDocId, folderId)
-        const folder = folders.find((f) => f.id === folderId)
-        notify(`Moved to ${folder?.name || 'folder'}`)
-      }
-      setDraggedDocId(null)
-    }
-  }
-
-  const handleDragEnd = () => {
+  const resetDragState = () => {
     setDraggedDocId(null)
     setDropTargetFolderId(null)
+  }
+
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    const docId = active.data.current?.docId as string | undefined
+    const folderId = over?.data.current?.folderId as string | undefined
+
+    if (docId && folderId) {
+      const doc = documents.find((item) => item.id === docId)
+      if (doc && doc.folderId !== folderId) {
+        moveDocument(docId, folderId)
+        const folder = folders.find((item) => item.id === folderId)
+        notify(`Moved to ${folder?.name || 'folder'}`)
+      }
+    }
+
+    resetDragState()
   }
 
   const rootFolders = folders.filter((f) => f.parentId === null)
 
   return (
     <aside className="w-full flex-shrink-0 border-r-2 border-dashed border-pencil/20 dark:border-pencil-dark/20 flex flex-col h-full bg-paper/50 dark:bg-paper-dark/50 overflow-hidden">
-      {/* Header */}
       <div className="p-4 border-b-2 border-dashed border-pencil/20 dark:border-pencil-dark/20">
-        <h2
-          className="font-heading text-2xl text-pencil dark:text-pencil-dark"
-          style={{ transform: 'rotate(-1deg)' }}
-        >
-          📂 Folders
-        </h2>
+        <div className="flex items-center gap-2" style={{ transform: 'rotate(-1deg)' }}>
+          <FolderOpen size={20} strokeWidth={2.5} className="text-pencil dark:text-pencil-dark" />
+          <h2 className="font-heading text-2xl text-pencil dark:text-pencil-dark">Folders</h2>
+        </div>
       </div>
 
-      {/* Folder tree */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-1">
-        {rootFolders.map((folder) => {
-          const isExpanded = expandedFolders.has(folder.id)
-          const isActive = activeFolderId === folder.id
-          const docCount = documents.filter((d) => d.folderId === folder.id).length
-          const isInbox = folder.id === INBOX_FOLDER_ID
+      <DndContext
+        sensors={sensors}
+        onDragStart={({ active }) => setDraggedDocId((active.data.current?.docId as string) ?? null)}
+        onDragOver={({ over }) => setDropTargetFolderId((over?.data.current?.folderId as string) ?? null)}
+        onDragEnd={handleDragEnd}
+        onDragCancel={resetDragState}
+      >
+        <div className="flex-1 overflow-y-auto p-3 space-y-1">
+          {rootFolders.map((folder) => {
+            const isExpanded = expandedFolders.has(folder.id)
+            const isActive = activeFolderId === folder.id
+            const docCount = documents.filter((d) => d.folderId === folder.id).length
+            const isInbox = folder.id === INBOX_FOLDER_ID
 
-          return (
-            <div key={folder.id}>
-              <div
-                className={`flex items-center gap-2 px-3 py-2 cursor-pointer font-body text-lg transition-colors group ${
-                  isActive
-                    ? 'bg-postit border-2 border-pencil dark:border-pencil-dark'
-                    : 'hover:bg-erased/50 dark:hover:bg-erased-dark/50 border-2 border-transparent'
-                } ${dropTargetFolderId === folder.id ? 'folder-drop-target' : ''}`}
-                style={{ borderRadius: wobbly }}
-                onClick={() => toggleFolder(folder.id)}
-                onDragOver={(e) => handleDragOver(e, folder.id)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, folder.id)}
-              >
-                {isExpanded ? (
-                  <ChevronDown size={16} strokeWidth={2.5} />
-                ) : (
-                  <ChevronRight size={16} strokeWidth={2.5} />
-                )}
+            return (
+              <div key={folder.id}>
+                <FolderRow
+                  folderId={folder.id}
+                  folderName={folder.name}
+                  docCount={docCount}
+                  isActive={isActive}
+                  isExpanded={isExpanded}
+                  isInbox={isInbox}
+                  isDropTarget={dropTargetFolderId === folder.id}
+                  editingFolderId={editingFolderId}
+                  editingName={editingName}
+                  onEditingNameChange={setEditingName}
+                  onClick={() => toggleFolder(folder.id)}
+                  onRename={() => handleRename(folder.id)}
+                  onStartEditing={() => {
+                    setEditingFolderId(folder.id)
+                    setEditingName(folder.name)
+                  }}
+                  onDelete={() => deleteFolder(folder.id)}
+                />
 
-                {isInbox ? (
-                  <Inbox size={18} strokeWidth={2.5} />
-                ) : (
-                  <FolderOpen size={18} strokeWidth={2.5} />
-                )}
-
-                {editingFolderId === folder.id ? (
-                  <input
-                    type="text"
-                    value={editingName}
-                    onChange={(e) => setEditingName(e.target.value)}
-                    onBlur={() => handleRename(folder.id)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleRename(folder.id)}
-                    className="bg-transparent border-b border-pencil outline-none flex-1 font-body text-lg"
-                    autoFocus
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                ) : (
-                  <span className="flex-1 truncate">{folder.name}</span>
-                )}
-
-                <span className="text-sm text-pencil/40 dark:text-pencil-dark/40">
-                  {docCount}
-                </span>
-
-                {!isInbox && (
-                  <div className="hidden group-hover:flex items-center gap-1">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setEditingFolderId(folder.id)
-                        setEditingName(folder.name)
-                      }}
-                      className="hover:text-pen"
-                      title="Rename"
-                    >
-                      <Pencil size={14} strokeWidth={2.5} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        deleteFolder(folder.id)
-                      }}
-                      className="hover:text-marker"
-                      title="Delete"
-                    >
-                      <Trash2 size={14} strokeWidth={2.5} />
-                    </button>
+                {isExpanded && (
+                  <div className="ml-6 mt-1 space-y-0.5 animate-slide-in-up">
+                    {documents
+                      .filter((d) => d.folderId === folder.id)
+                      .map((doc) => (
+                        <DraggableDocumentRow
+                          key={doc.id}
+                          docId={doc.id}
+                          title={doc.title || 'Untitled'}
+                          isActive={activeDocumentId === doc.id}
+                          isDragging={draggedDocId === doc.id}
+                          onOpen={() => setActiveDocument(doc.id)}
+                          onDelete={() => deleteDocument(doc.id)}
+                        />
+                      ))}
                   </div>
                 )}
               </div>
+            )
+          })}
+        </div>
 
-              {/* Documents in this folder */}
-              {isExpanded && (
-                <div className="ml-6 mt-1 space-y-0.5 animate-slide-in-up">
-                  {documents
-                    .filter((d) => d.folderId === folder.id)
-                    .map((doc) => (
-                      <div
-                        key={doc.id}
-                        draggable
-                        onDragStart={() => handleDragStart(doc.id)}
-                        onDragEnd={handleDragEnd}
-                        className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer font-body text-base transition-colors group ${
-                          activeDocumentId === doc.id
-                            ? 'text-pen font-bold'
-                            : 'text-pencil/70 dark:text-pencil-dark/70 hover:text-pencil dark:hover:text-pencil-dark'
-                        } ${draggedDocId === doc.id ? 'opacity-40' : ''}`}
-                        onClick={() => setActiveDocument(doc.id)}
-                      >
-                        <GripVertical size={12} strokeWidth={2} className="text-pencil/20 flex-shrink-0 cursor-grab" />
-                        <FileText size={14} strokeWidth={2.5} />
-                        <span className="flex-1 truncate">{doc.title || 'Untitled'}</span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            deleteDocument(doc.id)
-                          }}
-                          className="hidden group-hover:block hover:text-marker"
-                          title="Delete document"
-                        >
-                          <Trash2 size={12} strokeWidth={2.5} />
-                        </button>
-                      </div>
-                    ))}
-                </div>
-              )}
+        <DragOverlay>
+          {draggedDocument ? (
+            <div
+              className="flex items-center gap-2 border-2 border-pencil bg-white px-3 py-2 font-body text-base text-pencil shadow-hard dark:border-pencil-dark dark:bg-paper-dark dark:text-pencil-dark"
+              style={{ borderRadius: wobbly }}
+            >
+              <GripVertical size={12} strokeWidth={2} className="text-pencil/30" />
+              <FileText size={14} strokeWidth={2.5} />
+              <span className="max-w-[220px] truncate">{draggedDocument.title || 'Untitled'}</span>
             </div>
-          )
-        })}
-      </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
 
-      {/* New folder */}
       <div className="p-3 border-t-2 border-dashed border-pencil/20 dark:border-pencil-dark/20 space-y-2">
         {showNewFolder ? (
           <div className="flex gap-2">
@@ -255,9 +214,10 @@ export function LeftSidebar() {
             </button>
             <button
               onClick={() => setShowNewFolder(false)}
-              className="text-pencil/40 font-body text-sm hover:text-marker"
+              className="text-pencil/40 hover:text-marker"
+              title="Close"
             >
-              ✕
+              <X size={14} strokeWidth={2.5} />
             </button>
           </div>
         ) : (
@@ -279,5 +239,164 @@ export function LeftSidebar() {
         </button>
       </div>
     </aside>
+  )
+}
+
+function FolderRow({
+  folderId,
+  folderName,
+  docCount,
+  isActive,
+  isExpanded,
+  isInbox,
+  isDropTarget,
+  editingFolderId,
+  editingName,
+  onEditingNameChange,
+  onClick,
+  onRename,
+  onStartEditing,
+  onDelete,
+}: {
+  folderId: string
+  folderName: string
+  docCount: number
+  isActive: boolean
+  isExpanded: boolean
+  isInbox: boolean
+  isDropTarget: boolean
+  editingFolderId: string | null
+  editingName: string
+  onEditingNameChange: (value: string) => void
+  onClick: () => void
+  onRename: () => void
+  onStartEditing: () => void
+  onDelete: () => void
+}) {
+  const { isOver, setNodeRef } = useDroppable({
+    id: `folder:${folderId}`,
+    data: { folderId },
+  })
+
+  const showDropState = isDropTarget || isOver
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex items-center gap-2 px-3 py-2 cursor-pointer font-body text-lg transition-colors group ${
+        isActive
+          ? 'bg-postit border-2 border-pencil dark:border-pencil-dark'
+          : 'hover:bg-erased/50 dark:hover:bg-erased-dark/50 border-2 border-transparent'
+      } ${showDropState ? 'bg-pen/10 dark:bg-pen/20 border-pen ring-2 ring-pen/30' : ''}`}
+      style={{ borderRadius: wobbly }}
+      onClick={onClick}
+    >
+      {isExpanded ? (
+        <ChevronDown size={16} strokeWidth={2.5} />
+      ) : (
+        <ChevronRight size={16} strokeWidth={2.5} />
+      )}
+
+      {isInbox ? (
+        <Inbox size={18} strokeWidth={2.5} />
+      ) : (
+        <FolderOpen size={18} strokeWidth={2.5} />
+      )}
+
+      {editingFolderId === folderId ? (
+        <input
+          type="text"
+          value={editingName}
+          onChange={(e) => onEditingNameChange(e.target.value)}
+          onBlur={onRename}
+          onKeyDown={(e) => e.key === 'Enter' && onRename()}
+          className="bg-transparent border-b border-pencil outline-none flex-1 font-body text-lg"
+          autoFocus
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <span className="flex-1 truncate">{folderName}</span>
+      )}
+
+      <span className="text-sm text-pencil/40 dark:text-pencil-dark/40">{docCount}</span>
+
+      {!isInbox && (
+        <div className="hidden group-hover:flex items-center gap-1">
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              onStartEditing()
+            }}
+            className="hover:text-pen"
+            title="Rename"
+          >
+            <Pencil size={14} strokeWidth={2.5} />
+          </button>
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete()
+            }}
+            className="hover:text-marker"
+            title="Delete"
+          >
+            <Trash2 size={14} strokeWidth={2.5} />
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DraggableDocumentRow({
+  docId,
+  title,
+  isActive,
+  isDragging,
+  onOpen,
+  onDelete,
+}: {
+  docId: string
+  title: string
+  isActive: boolean
+  isDragging: boolean
+  onOpen: () => void
+  onDelete: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({
+    id: `doc:${docId}`,
+    data: { docId },
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform) }}
+      {...attributes}
+      {...listeners}
+      className={`flex items-center gap-2 px-3 py-1.5 cursor-grab active:cursor-grabbing font-body text-base transition-all group ${
+        isActive
+          ? 'text-pen font-bold'
+          : 'text-pencil/70 dark:text-pencil-dark/70 hover:text-pencil dark:hover:text-pencil-dark'
+      } ${isDragging ? 'scale-95 opacity-30' : 'hover:bg-erased/30 dark:hover:bg-erased-dark/30'}`}
+      onClick={onOpen}
+    >
+      <GripVertical size={12} strokeWidth={2} className="text-pencil/30 flex-shrink-0" />
+      <FileText size={14} strokeWidth={2.5} />
+      <span className="flex-1 truncate">{title}</span>
+      <button
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation()
+          onDelete()
+        }}
+        className="hidden group-hover:block hover:text-marker"
+        title="Delete document"
+      >
+        <Trash2 size={12} strokeWidth={2.5} />
+      </button>
+    </div>
   )
 }

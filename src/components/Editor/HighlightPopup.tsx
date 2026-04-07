@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useLayoutEffect } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import type { Editor } from '@tiptap/react'
-import { Plus, Loader2, Check, X, ThumbsUp, ThumbsDown } from 'lucide-react'
+import { Plus, Loader2, Check, X, ThumbsUp, ThumbsDown, Eye, Pencil } from 'lucide-react'
 import { translateWord } from '../../services/translation'
 import { useVocabularyStore } from '../../stores/vocabularyStore'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -9,7 +9,9 @@ import { wobbly } from '../../lib/utils'
 interface HighlightPopupProps {
   word: string
   sentence: string
-  rect: DOMRect
+  editorRelTop: number
+  editorRelBottom: number
+  editorRelLeft: number
   documentId: string
   positionInDoc: number
   onDone: () => void
@@ -19,7 +21,9 @@ interface HighlightPopupProps {
 export function HighlightPopup({
   word,
   sentence,
-  rect,
+  editorRelTop,
+  editorRelBottom,
+  editorRelLeft,
   documentId,
   positionInDoc,
   onDone,
@@ -32,13 +36,18 @@ export function HighlightPopup({
   const translateFrom = useSettingsStore((s) => s.settings.translateFrom)
   const autoAccept = useSettingsStore((s) => s.settings.autoAcceptTranslation)
   const requireConfirmation = useSettingsStore((s) => s.settings.requireConfirmation)
+  const revealTranslation = useSettingsStore((s) => s.settings.revealTranslation)
+  const highlightColor = useSettingsStore((s) => s.settings.highlightColor)
 
   const [translation, setTranslation] = useState('')
   const [loading, setLoading] = useState(false)
   const [added, setAdded] = useState(false)
   const [translationAccepted, setTranslationAccepted] = useState(false)
   const [translationSource, setTranslationSource] = useState<string>('')
-  const [pos, setPos] = useState({ top: 0, left: 0, below: false })
+  const [revealed, setRevealed] = useState(!revealTranslation)
+  const [editingWord, setEditingWord] = useState(false)
+  const [editedWord, setEditedWord] = useState(word)
+  const [popupPosition, setPopupPosition] = useState({ top: 8, left: 8, pointerLeft: 150, placement: 'top' as 'top' | 'bottom' })
   const popupRef = useRef<HTMLDivElement>(null)
 
   // Auto-translate on open
@@ -47,6 +56,9 @@ export function HighlightPopup({
     setLoading(true)
     setAdded(false)
     setTranslationAccepted(false)
+    setRevealed(!revealTranslation)
+    setEditedWord(word)
+    setEditingWord(false)
     translateWord(word, translateFrom, translateTo).then((result) => {
       if (!cancelled) {
         setTranslation(result.translation)
@@ -58,30 +70,7 @@ export function HighlightPopup({
       }
     })
     return () => { cancelled = true }
-  }, [word, translateFrom, translateTo, autoAccept])
-
-  // Calculate position relative to viewport, clamped to screen
-  useLayoutEffect(() => {
-    const popupEl = popupRef.current
-    const pad = 12
-    const popupH = popupEl?.offsetHeight ?? 120
-    const popupW = popupEl?.offsetWidth ?? 260
-
-    let top = rect.top - popupH - 22
-    let below = false
-
-    // If popup would go above viewport, show below selection
-    if (top < pad) {
-      top = rect.bottom + 22
-      below = true
-    }
-
-    let left = rect.left + rect.width / 2 - popupW / 2
-    // Clamp horizontally
-    left = Math.max(pad, Math.min(left, window.innerWidth - popupW - pad))
-
-    setPos({ top, left, below })
-  }, [rect])
+  }, [word, translateFrom, translateTo, autoAccept, revealTranslation])
 
   // Close on click outside
   useEffect(() => {
@@ -101,19 +90,44 @@ export function HighlightPopup({
     }
   }, [onDone])
 
+  useLayoutEffect(() => {
+    const popupEl = popupRef.current
+    const containerEl = popupEl?.offsetParent as HTMLElement | null
+    if (!popupEl) return
+
+    const width = popupEl.offsetWidth || 300
+    const height = popupEl.offsetHeight || 196
+    const containerWidth = containerEl?.clientWidth ?? window.innerWidth
+    const visibleTop = containerEl?.scrollTop ?? 0
+    const visibleBottom = visibleTop + (containerEl?.clientHeight ?? window.innerHeight)
+    const unclampedLeft = editorRelLeft - width / 2
+    const left = Math.min(Math.max(8, unclampedLeft), Math.max(8, containerWidth - width - 8))
+    const preferredTop = editorRelTop - height - 18
+    const canPlaceAbove = preferredTop >= visibleTop + 8
+    const canPlaceBelow = editorRelBottom + height + 18 <= visibleBottom - 8
+    const placement = !canPlaceAbove && canPlaceBelow ? 'bottom' : 'top'
+    const top = placement === 'bottom'
+      ? Math.min(editorRelBottom + 18, Math.max(8, visibleBottom - height - 8))
+      : Math.max(8, preferredTop)
+    const pointerLeft = Math.min(width - 18, Math.max(18, editorRelLeft - left))
+
+    setPopupPosition({ top, left, pointerLeft, placement })
+  }, [editorRelBottom, editorRelLeft, editorRelTop, translation, loading, revealed, editingWord, editedWord, sentence, requireConfirmation, translationAccepted, word])
+
   const handleAdd = () => {
-    if (hasDuplicate(word, documentId)) {
+    const wordToAdd = editedWord.trim() || word
+    if (hasDuplicate(wordToAdd, documentId)) {
       notify('This word is already in your vocabulary!', 'info')
       onDone()
       return
     }
 
     if (editor) {
-      editor.chain().focus().toggleHighlight().run()
+      editor.chain().focus().setHighlight({ color: highlightColor }).run()
     }
 
     addEntry({
-      word,
+      word: wordToAdd,
       translation,
       contextSentence: sentence,
       notes: '',
@@ -122,7 +136,7 @@ export function HighlightPopup({
       documentId,
     })
 
-    notify(`"${word}" added to vocabulary!`)
+    notify(`"${wordToAdd}" added to vocabulary!`)
     setAdded(true)
     setTimeout(onDone, 500)
   }
@@ -135,22 +149,55 @@ export function HighlightPopup({
   return (
     <div
       ref={popupRef}
-      className="fixed z-50 animate-pop-in"
-      style={{ top: `${pos.top}px`, left: `${pos.left}px` }}
+      className="absolute z-50 animate-pop-in"
+      style={{
+        top: `${popupPosition.top}px`,
+        left: `${popupPosition.left}px`,
+        width: '300px',
+        maxWidth: 'calc(100% - 16px)',
+      }}
     >
       <div
-        className="bg-white dark:bg-paper-dark border-[3px] border-pencil dark:border-pencil-dark px-4 py-3 shadow-hard dark:shadow-hard-dark min-w-[250px] max-w-[350px]"
+        className="bg-white dark:bg-paper-dark border-[3px] border-pencil dark:border-pencil-dark px-4 py-3 shadow-hard dark:shadow-hard-dark"
         style={{ borderRadius: wobbly }}
       >
-        {/* Word header */}
+        {/* Word header — editable */}
         <div className="flex items-center justify-between mb-1">
-          <p className="font-heading text-lg text-pencil dark:text-pencil-dark font-bold">
-            {word}
-          </p>
-          <button onClick={onDone} className="text-pencil/40 hover:text-marker">
+          {editingWord ? (
+            <input
+              type="text"
+              value={editedWord}
+              onChange={(e) => setEditedWord(e.target.value)}
+              onBlur={() => setEditingWord(false)}
+              onKeyDown={(e) => { if (e.key === 'Enter') setEditingWord(false) }}
+              className="font-heading text-lg text-pencil dark:text-pencil-dark font-bold bg-transparent border-b-2 border-pen outline-none flex-1 mr-2"
+              autoFocus
+            />
+          ) : (
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              <p className="font-heading text-lg text-pencil dark:text-pencil-dark font-bold truncate">
+                {editedWord}
+              </p>
+              <button
+                onClick={() => setEditingWord(true)}
+                className="text-pencil/30 hover:text-pencil dark:hover:text-pencil-dark flex-shrink-0 transition-colors"
+                title="Edit word (e.g. change to infinitive)"
+              >
+                <Pencil size={12} strokeWidth={2.5} />
+              </button>
+            </div>
+          )}
+          <button onClick={onDone} className="text-pencil/40 hover:text-marker flex-shrink-0 ml-1">
             <X size={14} strokeWidth={3} />
           </button>
         </div>
+
+        {/* Original selection reference (if edited) */}
+        {editedWord !== word && (
+          <p className="font-body text-xs text-pencil/35 dark:text-pencil-dark/35 mb-1">
+            selected: &ldquo;{word}&rdquo;
+          </p>
+        )}
 
         {/* Context sentence */}
         {sentence && (
@@ -170,8 +217,18 @@ export function HighlightPopup({
             <Loader2 size={14} className="animate-spin" />
             Translating...
           </div>
+        ) : !revealed ? (
+          /* Click-to-reveal button */
+          <button
+            onClick={() => setRevealed(true)}
+            className="w-full flex items-center justify-center gap-2 font-body text-sm text-pencil/50 dark:text-pencil-dark/50 border-2 border-dashed border-pencil/20 dark:border-pencil-dark/20 py-2 mb-2 hover:bg-erased/50 dark:hover:bg-erased-dark/50 transition-colors"
+            style={{ borderRadius: wobbly }}
+          >
+            <Eye size={14} strokeWidth={2.5} />
+            Tap to reveal translation
+          </button>
         ) : (
-          <div className="mb-2">
+          <div className="mb-2 animate-slide-in-up">
             <input
               type="text"
               value={translation}
@@ -208,12 +265,12 @@ export function HighlightPopup({
         {/* Add button */}
         <button
           onClick={handleAdd}
-          disabled={loading || added}
+          disabled={loading || added || !revealed}
           className={`w-full flex items-center justify-center gap-2 font-body text-base px-3 py-1.5 border-2 border-pencil dark:border-pencil-dark transition-all duration-100
             ${added
               ? 'bg-green-500 text-white'
               : 'bg-postit text-pencil hover:bg-marker hover:text-white hover:translate-x-[1px] hover:translate-y-[1px]'
-            }`}
+            } disabled:opacity-40`}
           style={{ borderRadius: wobbly }}
         >
           {added ? (
@@ -224,19 +281,17 @@ export function HighlightPopup({
         </button>
       </div>
 
-      {/* Triangle pointer */}
+      {/* Triangle pointer (points down toward the word) */}
       <div
-        className="absolute left-1/2 -translate-x-1/2 w-0 h-0"
-        style={pos.below ? {
-          top: '-10px',
+        className="absolute -translate-x-1/2 w-0 h-0"
+        style={{
+          left: `${popupPosition.pointerLeft}px`,
+          bottom: popupPosition.placement === 'top' ? '-10px' : 'auto',
+          top: popupPosition.placement === 'bottom' ? '-10px' : 'auto',
           borderLeft: '10px solid transparent',
           borderRight: '10px solid transparent',
-          borderBottom: '10px solid #2d2d2d',
-        } : {
-          bottom: '-10px',
-          borderLeft: '10px solid transparent',
-          borderRight: '10px solid transparent',
-          borderTop: '10px solid #2d2d2d',
+          borderTop: popupPosition.placement === 'top' ? '10px solid #2d2d2d' : '0 solid transparent',
+          borderBottom: popupPosition.placement === 'bottom' ? '10px solid #2d2d2d' : '0 solid transparent',
         }}
       />
     </div>

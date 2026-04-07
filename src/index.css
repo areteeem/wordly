@@ -5,10 +5,6 @@
 /* ── Design system CSS custom properties ── */
 :root {
   --editor-font-size: 18px;
-  --highlight-color: #a8d8ea;
-}
-html.dark {
-  --highlight-color: #3a6f8f;
 }
 
 /* ── Paper texture background ── */
@@ -69,14 +65,87 @@ html.dark .ProseMirror p.is-editor-empty:first-child::before {
 .ProseMirror h3 { font-family: 'Kalam', cursive; font-weight: 700; font-size: 1.25em; }
 
 .ProseMirror mark {
-  background-color: var(--highlight-color);
   padding: 1px 4px;
   border-radius: 4px;
 }
-html.dark .ProseMirror mark { background-color: #3a6f8f; color: #e0ddd5; }
+html.dark .ProseMirror mark { color: #e0ddd5; }
 
 .ProseMirror ul { list-style-type: disc; padding-left: 1.5rem; }
 .ProseMirror ol { list-style-type: decimal; padding-left: 1.5rem; }
+.ProseMirror ul ul { list-style-type: circle; }
+.ProseMirror ul ul ul { list-style-type: square; }
+.ProseMirror ol ol { list-style-type: lower-alpha; }
+.ProseMirror li { margin-bottom: 0.15em; }
+.ProseMirror li > p { margin: 0; }
+
+/* Blockquote */
+.ProseMirror blockquote {
+  border-left: 4px solid rgba(45, 93, 161, 0.4);
+  padding-left: 1rem;
+  margin: 0.75rem 0;
+  color: rgba(45, 45, 45, 0.7);
+  font-style: italic;
+  background: rgba(45, 93, 161, 0.04);
+  padding: 0.5rem 1rem;
+  border-radius: 0 6px 6px 0;
+}
+html.dark .ProseMirror blockquote {
+  border-left-color: rgba(168, 216, 234, 0.4);
+  color: rgba(224, 221, 213, 0.7);
+  background: rgba(168, 216, 234, 0.06);
+}
+
+/* Code block */
+.ProseMirror pre {
+  font-family: 'Courier New', Courier, monospace;
+  background: rgba(45, 45, 45, 0.06);
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.75rem 0;
+  line-height: 1.5;
+  font-size: 0.9em;
+  border: 1px solid rgba(45, 45, 45, 0.1);
+}
+html.dark .ProseMirror pre {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.ProseMirror pre code { background: none; padding: 0; border-radius: 0; font-size: inherit; }
+
+/* Inline code */
+.ProseMirror code {
+  font-family: 'Courier New', Courier, monospace;
+  background: rgba(45, 45, 45, 0.08);
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 0.88em;
+}
+html.dark .ProseMirror code { background: rgba(255, 255, 255, 0.1); }
+
+/* Horizontal rule */
+.ProseMirror hr {
+  border: none;
+  border-top: 2px dashed rgba(45, 45, 45, 0.25);
+  margin: 1.25rem 0;
+}
+html.dark .ProseMirror hr { border-top-color: rgba(224, 221, 213, 0.2); }
+
+/* Links */
+.ProseMirror a {
+  color: #2d5da1;
+  text-decoration: underline;
+  text-decoration-color: rgba(45, 93, 161, 0.4);
+  cursor: pointer;
+  transition: text-decoration-color 150ms;
+}
+.ProseMirror a:hover { text-decoration-color: #2d5da1; }
+html.dark .ProseMirror a { color: #7bb8e0; text-decoration-color: rgba(123, 184, 224, 0.4); }
+html.dark .ProseMirror a:hover { text-decoration-color: #7bb8e0; }
+
+/* Subscript / Superscript */
+.ProseMirror sub { font-size: 0.75em; vertical-align: sub; }
+.ProseMirror sup { font-size: 0.75em; vertical-align: super; }
 
 .ProseMirror img {
   max-width: 100%;

@@ -15,6 +15,7 @@ import {
   Trash2,
   Copy,
   Filter,
+  FileText,
 } from 'lucide-react'
 import { useVocabularyStore } from '../../stores/vocabularyStore'
 import { useDocumentStore } from '../../stores/documentStore'
@@ -218,9 +219,10 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
         <button onClick={onClose} className="flex items-center gap-1 font-body text-sm text-pencil/60 hover:text-pencil transition-colors">
           <ArrowLeft size={18} strokeWidth={2.5} /> Back
         </button>
-        <h1 className="font-heading text-3xl text-pencil dark:text-pencil-dark" style={{ transform: 'rotate(-1deg)' }}>
-          📝 All Vocabulary
-        </h1>
+        <div className="flex items-center gap-2" style={{ transform: 'rotate(-1deg)' }}>
+          <FileText size={24} strokeWidth={2.5} className="text-pencil dark:text-pencil-dark" />
+          <h1 className="font-heading text-3xl text-pencil dark:text-pencil-dark">All Vocabulary</h1>
+        </div>
         <span className="font-body text-sm text-pencil/50 ml-auto">{filtered.length} words</span>
       </div>
 
@@ -435,7 +437,8 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
             {Array.from(grouped.entries()).map(([docId, docEntries]) => (
               <div key={docId}>
                 <h3 className="font-heading text-lg text-pencil dark:text-pencil-dark mb-2 flex items-center gap-2">
-                  📄 {getDocName(docId)}
+                  <FileText size={16} strokeWidth={2.5} />
+                  {getDocName(docId)}
                   <span className="font-body text-xs text-pencil/40">({docEntries.length})</span>
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

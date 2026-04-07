@@ -32,14 +32,18 @@ export function Editor() {
   const scrollToPosition = useDocumentStore((s) => s.scrollToPosition)
   const setScrollToPosition = useDocumentStore((s) => s.setScrollToPosition)
   const fontSize = useSettingsStore((s) => s.settings.fontSize)
+  const highlightPopupEnabled = useSettingsStore((s) => s.settings.highlightPopupEnabled)
+  const highlightPopupDelay = useSettingsStore((s) => s.settings.highlightPopupDelay)
   const folders = useFolderStore((s) => s.folders)
   const setActiveFolder = useFolderStore((s) => s.setActiveFolder)
 
   const [selectionInfo, setSelectionInfo] = useState<{
     text: string
-    rect: DOMRect
     sentence: string
     from: number
+    editorRelTop: number
+    editorRelBottom: number
+    editorRelLeft: number
   } | null>(null)
   const [tagInput, setTagInput] = useState('')
   const [isSelecting, setIsSelecting] = useState(false)
@@ -56,6 +60,7 @@ export function Editor() {
   // Track mouseup to finalize selection
   useEffect(() => {
     const handleMouseUp = () => {
+      if (!highlightPopupEnabled) return
       if (pendingSelectionRef.current) {
         // Re-read rect after mouseup for accurate positioning
         const domSel = window.getSelection()
@@ -63,19 +68,26 @@ export function Editor() {
           const range = domSel.getRangeAt(0)
           const rect = range.getBoundingClientRect()
           if (rect.width > 0) {
-            pendingSelectionRef.current = { ...pendingSelectionRef.current, rect }
+            // Compute editor-relative position
+            const editorEl = editorRef.current
+            const editorRect = editorEl?.getBoundingClientRect()
+            const scrollTop = editorEl?.scrollTop ?? 0
+            const editorRelTop = editorRect ? rect.top - editorRect.top + scrollTop : rect.top
+            const editorRelBottom = editorRect ? rect.bottom - editorRect.top + scrollTop : rect.bottom
+            const editorRelLeft = editorRect ? rect.left - editorRect.left + rect.width / 2 : rect.left
+            pendingSelectionRef.current = { ...pendingSelectionRef.current, editorRelTop, editorRelBottom, editorRelLeft }
           }
         }
         if (selectionTimerRef.current) clearTimeout(selectionTimerRef.current)
-        // Small delay after mouseup for final position
+        // Use configurable delay
         selectionTimerRef.current = setTimeout(() => {
           setSelectionInfo(pendingSelectionRef.current)
-        }, 80)
+        }, highlightPopupDelay)
       }
     }
     document.addEventListener('mouseup', handleMouseUp)
     return () => document.removeEventListener('mouseup', handleMouseUp)
-  }, [])
+  }, [highlightPopupEnabled, highlightPopupDelay])
 
   const editor = useEditor(
     {
@@ -84,7 +96,7 @@ export function Editor() {
           heading: { levels: [1, 2, 3] },
         }),
         Underline,
-        Highlight.configure({ multicolor: false }),
+        Highlight.configure({ multicolor: true }),
         Placeholder.configure({
           placeholder: 'Start writing or paste text here...',
         }),
@@ -101,6 +113,8 @@ export function Editor() {
         }
       },
       onSelectionUpdate: ({ editor }) => {
+        if (!highlightPopupEnabled) return
+
         const { from, to } = editor.state.selection
         if (from === to) {
           pendingSelectionRef.current = null
@@ -134,19 +148,22 @@ export function Editor() {
         )
         const sentence = fullText.substring(sentenceStart, to + sentenceEndRel + 1).trim()
 
-        // Get selection rectangle
+        // Get selection rectangle and compute editor-relative position
         const domSel = window.getSelection()
         if (domSel && domSel.rangeCount > 0) {
           const range = domSel.getRangeAt(0)
           const rect = range.getBoundingClientRect()
-          const pending = { text: text.trim(), rect, sentence, from }
+          const editorEl = editorRef.current
+          const editorRect = editorEl?.getBoundingClientRect()
+          const scrollTop = editorEl?.scrollTop ?? 0
+          const editorRelTop = editorRect ? rect.top - editorRect.top + scrollTop : rect.top
+          const editorRelBottom = editorRect ? rect.bottom - editorRect.top + scrollTop : rect.bottom
+          const editorRelLeft = editorRect ? rect.left - editorRect.left + rect.width / 2 : rect.left
+          const pending = { text: text.trim(), sentence, from, editorRelTop, editorRelBottom, editorRelLeft }
           pendingSelectionRef.current = pending
 
-          // Debounce: only show popup after 250ms pause (selection settled)
+          // Cancel any existing timer — popup only appears after mouseup + delay
           if (selectionTimerRef.current) clearTimeout(selectionTimerRef.current)
-          selectionTimerRef.current = setTimeout(() => {
-            setSelectionInfo(pendingSelectionRef.current)
-          }, 250)
         }
       },
       editorProps: {
@@ -336,10 +353,25 @@ export function Editor() {
       {/* Editor canvas */}
       <div
         ref={editorRef}
-        className="flex-1 overflow-y-auto mx-4 md:mx-8 mb-4 bg-white dark:bg-paper-dark border-2 border-pencil dark:border-pencil-dark"
+        className="flex-1 overflow-y-auto mx-4 md:mx-8 mb-4 bg-white dark:bg-paper-dark border-2 border-pencil dark:border-pencil-dark relative"
         style={{ borderRadius: wobblyMd, boxShadow: '3px 3px 0px 0px rgba(45,45,45,0.1)' }}
       >
         <EditorContent editor={editor} />
+
+        {/* Highlight popup (absolute, inside editor scroll container) */}
+        {selectionInfo && activeDoc && (
+          <HighlightPopup
+            word={selectionInfo.text}
+            sentence={selectionInfo.sentence}
+            editorRelTop={selectionInfo.editorRelTop}
+            editorRelBottom={selectionInfo.editorRelBottom}
+            editorRelLeft={selectionInfo.editorRelLeft}
+            documentId={activeDoc.id}
+            positionInDoc={selectionInfo.from}
+            onDone={clearSelection}
+            editor={editor}
+          />
+        )}
       </div>
 
       {/* Word count footer */}
@@ -348,19 +380,6 @@ export function Editor() {
           {wordCount} word{wordCount !== 1 ? 's' : ''}
         </span>
       </div>
-
-      {/* Highlight popup */}
-      {selectionInfo && activeDoc && (
-        <HighlightPopup
-          word={selectionInfo.text}
-          sentence={selectionInfo.sentence}
-          rect={selectionInfo.rect}
-          documentId={activeDoc.id}
-          positionInDoc={selectionInfo.from}
-          onDone={clearSelection}
-          editor={editor}
-        />
-      )}
     </div>
   )
 }

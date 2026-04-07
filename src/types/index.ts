@@ -73,6 +73,9 @@ export interface AppSettings {
   rightPanelWidth: number
   dailyGoal: number
   vocabFullScreen: boolean
+  highlightPopupEnabled: boolean
+  highlightPopupDelay: number
+  revealTranslation: boolean
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -99,6 +102,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   rightPanelWidth: 320,
   dailyGoal: 10,
   vocabFullScreen: false,
+  highlightPopupEnabled: true,
+  highlightPopupDelay: 1000,
+  revealTranslation: true,
 }
 
 export const LANGUAGES = [

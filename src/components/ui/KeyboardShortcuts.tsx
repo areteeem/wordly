@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { X } from 'lucide-react'
+import { X, Keyboard } from 'lucide-react'
 import { wobblyMd } from '../../lib/utils'
 
 interface KeyboardShortcutsProps {
@@ -55,9 +55,10 @@ export function KeyboardShortcuts({ open, onClose }: KeyboardShortcutsProps) {
         style={{ borderRadius: wobblyMd }}
       >
         <div className="flex items-center justify-between p-5 border-b-2 border-dashed border-pencil/20 dark:border-pencil-dark/20">
-          <h2 className="font-heading text-3xl text-pencil dark:text-pencil-dark" style={{ transform: 'rotate(-1deg)' }}>
-            ⌨️ Keyboard Shortcuts
-          </h2>
+          <div className="flex items-center gap-2" style={{ transform: 'rotate(-1deg)' }}>
+            <Keyboard size={24} strokeWidth={2.5} className="text-pencil dark:text-pencil-dark" />
+            <h2 className="font-heading text-3xl text-pencil dark:text-pencil-dark">Keyboard Shortcuts</h2>
+          </div>
           <button onClick={onClose} className="text-pencil/60 hover:text-marker">
             <X size={24} strokeWidth={2.5} />
           </button>

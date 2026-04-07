@@ -19,6 +19,7 @@ import {
   Loader2,
   Navigation,
   Star,
+  Lightbulb,
 } from 'lucide-react'
 import { useVocabularyStore } from '../../stores/vocabularyStore'
 import { useDocumentStore } from '../../stores/documentStore'
@@ -214,12 +215,10 @@ export function RightSidebar() {
     <aside className="w-full flex-shrink-0 border-l-2 border-dashed border-pencil/20 dark:border-pencil-dark/20 flex flex-col h-full bg-paper/50 dark:bg-paper-dark/50 overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b-2 border-dashed border-pencil/20 dark:border-pencil-dark/20">
-        <h2
-          className="font-heading text-2xl text-pencil dark:text-pencil-dark mb-3"
-          style={{ transform: 'rotate(1deg)' }}
-        >
-          📝 Vocabulary
-        </h2>
+        <div className="mb-3 flex items-center gap-2" style={{ transform: 'rotate(1deg)' }}>
+          <FileText size={20} strokeWidth={2.5} className="text-pencil dark:text-pencil-dark" />
+          <h2 className="font-heading text-2xl text-pencil dark:text-pencil-dark">Vocabulary</h2>
+        </div>
 
         {/* Scope toggle */}
         <div className="flex gap-0.5 mb-3">
@@ -383,7 +382,8 @@ export function RightSidebar() {
               style={{ borderRadius: wobbly }}
               title="Click to use this translation"
             >
-              💡 {translationSuggestion}
+              <Lightbulb size={12} strokeWidth={2.5} />
+              {translationSuggestion}
             </button>
           )}
           <div className="flex gap-2">
@@ -450,7 +450,8 @@ export function RightSidebar() {
                 Daily goal
               </span>
               <span className="font-heading text-xs text-pencil dark:text-pencil-dark">
-                {todayCount}/{dailyGoal} {pct >= 100 ? '🎉' : ''}
+                {todayCount}/{dailyGoal}
+                {pct >= 100 && <Check size={12} strokeWidth={3} className="inline-block ml-1 text-green-600" />}
               </span>
             </div>
             <div className="w-full h-2 bg-pencil/10 dark:bg-pencil-dark/10 overflow-hidden" style={{ borderRadius: '4px' }}>
