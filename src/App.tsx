@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef, useState } from 'react'
+import { useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { Settings, PanelLeftClose, PanelLeft, PanelRightClose, PanelRight, Search, BookOpen, Target, Download } from 'lucide-react'
 import { Editor } from './components/Editor/Editor'
 import { LeftSidebar } from './components/Sidebar/LeftSidebar'
@@ -10,6 +10,9 @@ import { Notifications } from './components/ui/Notifications'
 import { VocabFullScreen } from './components/Vocabulary/VocabFullScreen'
 import { ExerciseMode } from './components/Exercises/ExerciseMode'
 import { ExportDialog } from './components/Export/ExportDialog'
+import { MobileBottomNav } from './components/ui/MobileBottomNav'
+import { FloatingActionButton } from './components/ui/FloatingActionButton'
+import { useSwipeGesture } from './hooks/useSwipeGesture'
 import { useFolderStore } from './stores/folderStore'
 import { useDocumentStore } from './stores/documentStore'
 import { useVocabularyStore } from './stores/vocabularyStore'
@@ -30,6 +33,10 @@ function App() {
   const updateSettings = useSettingsStore((s) => s.updateSettings)
   const createDocument = useDocumentStore((s) => s.createDocument)
   const activeFolderId = useFolderStore((s) => s.activeFolderId)
+  const activeDocumentId = useDocumentStore((s) => s.activeDocumentId)
+  const setActiveDocument = useDocumentStore((s) => s.setActiveDocument)
+  const entries = useVocabularyStore((s) => s.entries)
+  const dailyGoal = useSettingsStore((s) => s.settings.dailyGoal)
 
   const [leftOpen, setLeftOpen] = useState(true)
   const [rightOpen, setRightOpen] = useState(true)
@@ -38,6 +45,24 @@ function App() {
   const [exerciseOpen, setExerciseOpen] = useState(false)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [headerVisible, setHeaderVisible] = useState(true)
+  const lastScrollY = useRef(0)
+  const prevTheme = useRef(theme)
+
+  // Daily progress count
+  const todayCount = useMemo(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return entries.filter((e) => e.createdAt >= today.getTime()).length
+  }, [entries])
+
+  // Mobile active tab for bottom nav
+  const mobileActiveTab = useMemo(() => {
+    if (exerciseOpen) return 'exercises'
+    if (vocabFullScreenOpen || rightOpen) return 'vocabulary'
+    if (leftOpen) return 'folders'
+    return 'home'
+  }, [exerciseOpen, vocabFullScreenOpen, rightOpen, leftOpen])
 
   // Resize state
   const [resizing, setResizing] = useState<'left' | 'right' | null>(null)
@@ -68,13 +93,46 @@ function App() {
     loadTemplates()
   }, [])
 
-  // Apply theme class to <html>
+  // Apply theme class to <html> with smooth transition
   useEffect(() => {
     const html = document.documentElement
+    // Add transition class before changing theme
+    if (prevTheme.current !== theme) {
+      html.classList.add('theme-transitioning')
+      setTimeout(() => html.classList.remove('theme-transitioning'), 350)
+    }
     html.classList.remove('dark', 'neutral')
     if (theme === 'dark') html.classList.add('dark')
     if (theme === 'neutral') html.classList.add('neutral')
+    prevTheme.current = theme
   }, [theme])
+
+  // Swipe gestures for mobile sidebars (Feature #3)
+  useSwipeGesture({
+    enabled: isMobile,
+    onSwipeRight: () => { if (!leftOpen) setLeftOpen(true) },
+    onSwipeLeft: () => { if (!rightOpen) setRightOpen(true) },
+    onSwipeDown: () => {
+      if (vocabFullScreenOpen) setVocabFullScreenOpen(false)
+      else if (exerciseOpen) setExerciseOpen(false)
+    },
+  })
+
+  // Compact header on scroll (Feature #25)
+  useEffect(() => {
+    if (!isMobile) return
+    const handleScroll = () => {
+      const currentY = window.scrollY
+      if (currentY > lastScrollY.current && currentY > 50) {
+        setHeaderVisible(false)
+      } else {
+        setHeaderVisible(true)
+      }
+      lastScrollY.current = currentY
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [isMobile])
 
   // Resize handlers
   const handleResizeStart = useCallback((side: 'left' | 'right', e: React.MouseEvent) => {
@@ -193,9 +251,20 @@ function App() {
   }, [commandPaletteOpen, settingsOpen, activeFolderId, createDocument, toggleSettings, vocabFullScreenOpen, exerciseOpen, exportDialogOpen, shortcutsOpen])
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
-      {/* Top bar */}
-      <header className="flex items-center justify-between px-4 py-2 border-b-2 border-dashed border-pencil/20 dark:border-pencil-dark/20 bg-paper dark:bg-paper-dark">
+    <div className={`h-screen flex flex-col overflow-hidden ${isMobile ? 'has-bottom-nav' : ''}`}>
+      {/* Skip to content link (Feature #28) */}
+      <a href="#main-content" className="skip-link">Skip to content</a>
+
+      {/* Swipe hints for mobile (Feature #3) */}
+      {isMobile && !leftOpen && !rightOpen && (
+        <>
+          <div className="swipe-hint-left" />
+          <div className="swipe-hint-right" />
+        </>
+      )}
+
+      {/* Top bar (Feature #25 - auto-hide on mobile) */}
+      <header className={`flex items-center justify-between px-4 py-2 border-b-2 border-dashed border-pencil/20 dark:border-pencil-dark/20 bg-paper dark:bg-paper-dark ${isMobile ? 'header-compact' : ''} ${isMobile && !headerVisible ? 'collapsed' : ''}`}>
         <div className="flex items-center gap-3">
           <button
             onClick={() => setLeftOpen(!leftOpen)}
@@ -282,7 +351,7 @@ function App() {
       </header>
 
       {/* Main content */}
-      <div className="flex-1 flex min-h-0">
+      <div className="flex-1 flex min-h-0" id="main-content">
         {leftOpen && !isMobile && (
           <>
             <div style={{ width: leftPanelWidth, flexShrink: 0 }} className="panel-slide-left">
@@ -334,6 +403,34 @@ function App() {
       <ExportDialog open={exportDialogOpen} onClose={() => setExportDialogOpen(false)} />
       <KeyboardShortcuts open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <Notifications />
+
+      {/* Mobile Bottom Navigation (Feature #1) */}
+      {isMobile && (
+        <MobileBottomNav
+          activeTab={mobileActiveTab}
+          dailyProgress={todayCount}
+          dailyGoal={dailyGoal}
+          onHome={() => {
+            setActiveDocument(null as any)
+            setLeftOpen(false)
+            setRightOpen(false)
+          }}
+          onFolders={() => setLeftOpen(true)}
+          onVocabulary={() => setRightOpen(true)}
+          onExercises={() => setExerciseOpen(true)}
+          onExport={() => setExportDialogOpen(true)}
+          onSettings={() => toggleSettings()}
+        />
+      )}
+
+      {/* Floating Action Button for Mobile (Feature #23) */}
+      {isMobile && (
+        <FloatingActionButton
+          onAddWord={() => setRightOpen(true)}
+          onNewDocument={() => createDocument(activeFolderId)}
+          onImport={() => setRightOpen(true)}
+        />
+      )}
     </div>
   )
 }

@@ -49,6 +49,9 @@ export function Editor() {
   const [isSelecting, setIsSelecting] = useState(false)
   const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingSelectionRef = useRef<typeof selectionInfo>(null)
+  const [readingProgress, setReadingProgress] = useState(0)
+  const [toolbarVisible, setToolbarVisible] = useState(true)
+  const lastEditorScrollY = useRef(0)
 
   const editorRef = useRef<HTMLDivElement>(null)
 
@@ -56,6 +59,30 @@ export function Editor() {
   useEffect(() => {
     document.documentElement.style.setProperty('--editor-font-size', `${fontSize}px`)
   }, [fontSize])
+
+  // Reading progress & collapsible toolbar tracking (Features #11, #16)
+  useEffect(() => {
+    const editorEl = editorRef.current
+    if (!editorEl) return
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = editorEl
+      const maxScroll = scrollHeight - clientHeight
+      if (maxScroll > 0) {
+        setReadingProgress(Math.round((scrollTop / maxScroll) * 100))
+      }
+      // Auto-hide toolbar on scroll down on mobile
+      if (window.innerWidth <= 768) {
+        if (scrollTop > lastEditorScrollY.current + 20) {
+          setToolbarVisible(false)
+        } else if (scrollTop < lastEditorScrollY.current - 10) {
+          setToolbarVisible(true)
+        }
+      }
+      lastEditorScrollY.current = scrollTop
+    }
+    editorEl.addEventListener('scroll', handleScroll, { passive: true })
+    return () => editorEl.removeEventListener('scroll', handleScroll)
+  }, [activeDoc?.id])
 
   // Track mouseup to finalize selection
   useEffect(() => {
@@ -224,26 +251,21 @@ export function Editor() {
     }
   }, [activeDoc?.id])
 
-  // Scroll to word position when triggered from vocabulary sidebar
+  // Scroll to word position when triggered from vocabulary sidebar (Feature #18)
   useEffect(() => {
     if (editor && scrollToPosition !== null && scrollToPosition > 0) {
       try {
         const pos = Math.min(scrollToPosition, editor.state.doc.content.size - 1)
         editor.chain().focus().setTextSelection(pos).run()
 
-        // Scroll the position into view
+        // Scroll the position into view with glow pulse
         const domAtPos = editor.view.domAtPos(pos)
         if (domAtPos && domAtPos.node) {
           const el = domAtPos.node instanceof HTMLElement ? domAtPos.node : domAtPos.node.parentElement
           if (el) {
             el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-            // Flash highlight effect
-            el.style.transition = 'background-color 0.3s'
-            el.style.backgroundColor = 'rgba(45, 93, 161, 0.25)'
-            setTimeout(() => {
-              el.style.backgroundColor = ''
-              setTimeout(() => { el.style.transition = '' }, 300)
-            }, 1500)
+            el.classList.add('glow-pulse-word')
+            setTimeout(() => el.classList.remove('glow-pulse-word'), 3500)
           }
         }
       } catch {
@@ -347,8 +369,10 @@ export function Editor() {
         />
       </div>
 
-      {/* Toolbar */}
-      {editor && <EditorToolbar editor={editor} />}
+      {/* Toolbar (Feature #16 - collapsible on mobile scroll) */}
+      <div className={`toolbar-collapsible ${!toolbarVisible ? 'toolbar-hidden' : ''}`}>
+        {editor && <EditorToolbar editor={editor} />}
+      </div>
 
       {/* Editor canvas */}
       <div
@@ -356,6 +380,11 @@ export function Editor() {
         className="flex-1 overflow-y-auto mx-4 md:mx-8 mb-4 bg-white dark:bg-paper-dark border-2 border-pencil dark:border-pencil-dark relative"
         style={{ borderRadius: wobblyMd, boxShadow: '3px 3px 0px 0px rgba(45,45,45,0.1)' }}
       >
+        {/* Reading Progress Bar (Feature #11) */}
+        <div className="reading-progress">
+          <div className="reading-progress-fill" style={{ width: `${readingProgress}%` }} />
+        </div>
+
         <EditorContent editor={editor} />
 
         {/* Highlight popup (absolute, inside editor scroll container) */}

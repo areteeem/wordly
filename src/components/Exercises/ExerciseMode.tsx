@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   DndContext,
   DragEndEvent,
@@ -29,6 +29,7 @@ import { useVocabularyStore } from '../../stores/vocabularyStore'
 import { useDocumentStore } from '../../stores/documentStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { wobbly, wobblyMd } from '../../lib/utils'
+import { Confetti } from '../ui/Confetti'
 import type { VocabularyEntry } from '../../types'
 
 type ExerciseType =
@@ -105,6 +106,10 @@ export function ExerciseMode({ onClose }: ExerciseProps) {
   const [matchedPairIds, setMatchedPairIds] = useState<Set<string>>(new Set())
   const [scramblePools, setScramblePools] = useState<Record<string, string[]>>({})
   const [scrambleUsedMarkers, setScrambleUsedMarkers] = useState<Record<string, string[]>>({})
+  const [showConfetti, setShowConfetti] = useState(false)
+  const [displayedScore, setDisplayedScore] = useState(0)
+  const [scoreFlash, setScoreFlash] = useState<'correct' | 'wrong' | null>(null)
+  const animatingScoreRef = useRef(false)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -141,6 +146,38 @@ export function ExerciseMode({ onClose }: ExerciseProps) {
     return { correct, total: shuffledEntries.length }
   }, [exerciseType, matchedPairIds, shuffledEntries, submitted, userAnswers])
 
+  // Animated score counter
+  useEffect(() => {
+    if (!score || animatingScoreRef.current) return
+    if (displayedScore === score.correct) return
+    animatingScoreRef.current = true
+    const target = score.correct
+    const step = target > displayedScore ? 1 : -1
+    let current = displayedScore
+    const interval = setInterval(() => {
+      current += step
+      setDisplayedScore(current)
+      if (current === target) {
+        clearInterval(interval)
+        animatingScoreRef.current = false
+      }
+    }, 80)
+    return () => { clearInterval(interval); animatingScoreRef.current = false }
+  }, [score?.correct])
+
+  // Reset displayed score when starting new exercise
+  useEffect(() => {
+    if (!exerciseType) setDisplayedScore(0)
+  }, [exerciseType])
+
+  // Trigger confetti on perfect or near-perfect score
+  useEffect(() => {
+    if (!submitted || !score) return
+    if (score.correct >= Math.ceil(score.total * 0.8)) {
+      setShowConfetti(true)
+    }
+  }, [submitted, score])
+
   const startExercise = (type: ExerciseType) => {
     const pool = shuffleArray(filteredEntries)
     const nextEntries = type === 'match-pairs' ? pool.slice(0, Math.min(pool.length, 8)) : pool
@@ -158,6 +195,9 @@ export function ExerciseMode({ onClose }: ExerciseProps) {
     setMismatchedPairCards([])
     setMatchedPairIds(new Set())
     setScrambleUsedMarkers({})
+    setShowConfetti(false)
+    setDisplayedScore(0)
+    setScoreFlash(null)
 
     if (type === 'match-pairs') {
       setMatchCards(createMatchCards(nextEntries))
@@ -181,6 +221,8 @@ export function ExerciseMode({ onClose }: ExerciseProps) {
     if (!exerciseType) return
     setSubmitted(true)
     const correct = getCorrectCount(exerciseType, shuffledEntries, userAnswers)
+    setScoreFlash(correct > shuffledEntries.length / 2 ? 'correct' : 'wrong')
+    setTimeout(() => setScoreFlash(null), 600)
     notify(`${correct} / ${shuffledEntries.length} correct!`)
   }
 
@@ -300,6 +342,8 @@ export function ExerciseMode({ onClose }: ExerciseProps) {
       nextMatched.add(first.pairId)
       setMatchedPairIds(nextMatched)
       setSelectedPairCards([])
+      setScoreFlash('correct')
+      setTimeout(() => setScoreFlash(null), 400)
 
       if (nextMatched.size === shuffledEntries.length) {
         setSubmitted(true)
@@ -309,6 +353,8 @@ export function ExerciseMode({ onClose }: ExerciseProps) {
     }
 
     setMismatchedPairCards(nextSelected)
+    setScoreFlash('wrong')
+    setTimeout(() => setScoreFlash(null), 400)
     window.setTimeout(() => {
       setSelectedPairCards([])
       setMismatchedPairCards([])
@@ -318,6 +364,13 @@ export function ExerciseMode({ onClose }: ExerciseProps) {
   const handleMultipleChoiceSelection = (entryId: string, value: string) => {
     const nextAnswers = { ...userAnswers, [entryId]: value }
     setUserAnswers(nextAnswers)
+
+    // Flash green/red on each answer
+    const entry = shuffledEntries.find((e) => e.id === entryId)
+    if (entry) {
+      setScoreFlash(value === entry.translation ? 'correct' : 'wrong')
+      setTimeout(() => setScoreFlash(null), 400)
+    }
 
     if (Object.keys(nextAnswers).length === shuffledEntries.length) {
       const correct = getCorrectCount('multiple-choice', shuffledEntries, nextAnswers)
@@ -404,7 +457,7 @@ export function ExerciseMode({ onClose }: ExerciseProps) {
                   key={type}
                   onClick={() => startExercise(type)}
                   disabled={filteredEntries.length < 2}
-                  className="text-left bg-white dark:bg-paper-dark border-2 border-pencil dark:border-pencil-dark p-6 transition-all duration-100 hover:rotate-[0.5deg] hover:shadow-hard dark:hover:shadow-hard-dark disabled:opacity-40 disabled:hover:rotate-0"
+                  className="text-left bg-white dark:bg-paper-dark border-2 border-pencil dark:border-pencil-dark p-6 transition-all duration-100 hover:rotate-[0.5deg] hover:shadow-hard dark:hover:shadow-hard-dark disabled:opacity-40 disabled:hover:rotate-0 active:scale-[0.97] touch-target"
                   style={{ borderRadius: wobblyMd, boxShadow: '3px 3px 0px 0px rgba(45,45,45,0.1)' }}
                 >
                   <h3 className="font-heading text-2xl text-pencil dark:text-pencil-dark mb-2">{title}</h3>
@@ -424,8 +477,9 @@ export function ExerciseMode({ onClose }: ExerciseProps) {
 
   return (
     <div className="fixed inset-0 z-50 bg-paper dark:bg-paper-dark flex flex-col overflow-hidden">
+      {showConfetti && <Confetti onDone={() => setShowConfetti(false)} />}
       <div className="flex items-center gap-4 p-4 border-b-2 border-dashed border-pencil/20 dark:border-pencil-dark/20">
-        <button onClick={() => setExerciseType(null)} className="flex items-center gap-1 font-body text-sm text-pencil/60 hover:text-pencil">
+        <button onClick={() => { setExerciseType(null); setShowConfetti(false) }} className="flex items-center gap-1 font-body text-sm text-pencil/60 hover:text-pencil touch-target">
           <ArrowLeft size={18} strokeWidth={2.5} /> Back
         </button>
         <h2 className="font-heading text-2xl text-pencil dark:text-pencil-dark">
@@ -439,9 +493,13 @@ export function ExerciseMode({ onClose }: ExerciseProps) {
 
         <div className="ml-auto flex items-center gap-3 flex-wrap">
           {score && (
-            <span className="flex items-center gap-1 font-heading text-xl text-pen">
+            <span className={`flex items-center gap-1 font-heading text-xl transition-all duration-300 ${
+              scoreFlash === 'correct' ? 'text-green-600 scale-125' :
+              scoreFlash === 'wrong' ? 'text-marker scale-90' :
+              'text-pen'
+            }`}>
               <Check size={18} strokeWidth={3} />
-              {score.correct}/{score.total}
+              <span className="tabular-nums animate-count-up">{displayedScore}</span>/{score.total}
             </span>
           )}
 
@@ -651,7 +709,7 @@ export function ExerciseMode({ onClose }: ExerciseProps) {
                       <button
                         key={`${entry.id}-${optionIndex}`}
                         onClick={() => !isAnswered && handleMultipleChoiceSelection(entry.id, option)}
-                        className={`font-body text-base px-4 py-2 border-2 transition-colors text-left ${style}`}
+                        className={`font-body text-base px-4 py-3 border-2 transition-colors text-left active:scale-[0.97] touch-target ${style}`}
                         style={{ borderRadius: wobbly }}
                         disabled={isAnswered}
                       >
@@ -761,7 +819,7 @@ export function ExerciseMode({ onClose }: ExerciseProps) {
                 <DragOverlay>
                   {selectedDragEntry ? (
                     <div
-                      className="flex items-center gap-2 border-2 border-pencil bg-white px-3 py-1.5 font-body text-base shadow-hard dark:border-pencil-dark dark:bg-paper-dark"
+                      className="flex items-center gap-2 border-2 border-pencil bg-white px-3 py-1.5 font-body text-base shadow-hard dark:border-pencil-dark dark:bg-paper-dark drag-ghost-enhanced"
                       style={{ borderRadius: wobbly }}
                     >
                       <GripVertical size={12} strokeWidth={2} className="text-pencil/30" />
@@ -776,9 +834,11 @@ export function ExerciseMode({ onClose }: ExerciseProps) {
                   onClick={() => {
                     setSubmitted(true)
                     const correct = shuffledEntries.filter((entry) => userAnswers[entry.id] === entry.id).length
+                    setScoreFlash(correct > shuffledEntries.length / 2 ? 'correct' : 'wrong')
+                    setTimeout(() => setScoreFlash(null), 600)
                     notify(`${correct} / ${shuffledEntries.length} correct!`)
                   }}
-                  className="mt-4 flex items-center gap-2 font-body text-base px-6 py-2 border-2 border-pencil dark:border-pencil-dark bg-postit hover:bg-marker hover:text-white transition-colors mx-auto"
+                  className="mt-4 flex items-center gap-2 font-body text-base px-6 py-2 border-2 border-pencil dark:border-pencil-dark bg-postit hover:bg-marker hover:text-white transition-colors mx-auto active:scale-[0.96] touch-target"
                   style={{ borderRadius: wobbly }}
                 >
                   <Check size={16} /> Check Answers
@@ -804,7 +864,7 @@ export function ExerciseMode({ onClose }: ExerciseProps) {
                       key={card.id}
                       onClick={() => handlePairCardClick(card)}
                       disabled={isMatched}
-                      className={`border-2 px-4 py-4 text-left transition-all ${
+                      className={`border-2 px-4 py-4 text-left transition-all active:scale-[0.96] touch-target ${
                         isMatched
                           ? 'border-green-500 bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300'
                           : isWrong
@@ -878,7 +938,7 @@ export function ExerciseMode({ onClose }: ExerciseProps) {
                         key={marker}
                         onClick={() => handleScrambleLetterClick(entry.id, letter, letterIndex)}
                         disabled={isUsed || submitted}
-                        className={`min-w-[40px] border-2 px-3 py-2 font-heading text-lg transition-colors ${
+                        className={`min-w-[44px] min-h-[44px] border-2 px-3 py-2 font-heading text-lg transition-colors active:scale-[0.9] ${
                           isUsed
                             ? 'border-pencil/15 bg-erased/60 text-pencil/25 dark:border-pencil-dark/15 dark:bg-erased-dark/60 dark:text-pencil-dark/25'
                             : 'border-pencil bg-white hover:bg-postit dark:border-pencil-dark dark:bg-paper-dark'

@@ -288,3 +288,446 @@ html.dark .ProseMirror a:hover { text-decoration-color: #7bb8e0; }
   border-right: 6px solid transparent;
   border-top: 6px solid #2d2d2d;
 }
+
+/* ── Smooth Theme Transitions (Feature #7) ── */
+body,
+body *,
+body *::before,
+body *::after {
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+  transition-duration: 0ms;
+}
+html.theme-transitioning body,
+html.theme-transitioning body *,
+html.theme-transitioning body *::before,
+html.theme-transitioning body *::after {
+  transition-duration: 300ms !important;
+  transition-timing-function: ease-in-out !important;
+}
+
+/* ── Touch Ripple Effect (Feature #4) ── */
+.ripple-container {
+  position: relative;
+  overflow: hidden;
+}
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.18;
+  transform: scale(0);
+  animation: ripple-expand 500ms ease-out forwards;
+  pointer-events: none;
+}
+@keyframes ripple-expand {
+  to { transform: scale(2.5); opacity: 0; }
+}
+
+/* ── Skeleton Loading (Feature #6) ── */
+.skeleton {
+  background: linear-gradient(90deg, rgba(45,45,45,0.06) 25%, rgba(45,45,45,0.12) 50%, rgba(45,45,45,0.06) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  border-radius: 6px;
+}
+html.dark .skeleton {
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
+  background-size: 200% 100%;
+}
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Mobile Bottom Nav (Feature #1) ── */
+.mobile-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  height: 60px;
+  border-top: 2px dashed rgba(45,45,45,0.2);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: slide-up-in 300ms ease-out;
+}
+html.dark .mobile-bottom-nav {
+  border-top-color: rgba(224,221,213,0.2);
+}
+.mobile-bottom-nav button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex: 1;
+  height: 100%;
+  font-family: 'Patrick Hand', cursive;
+  font-size: 11px;
+  color: rgba(45,45,45,0.5);
+  transition: color 150ms, transform 150ms;
+  position: relative;
+}
+html.dark .mobile-bottom-nav button {
+  color: rgba(224,221,213,0.5);
+}
+.mobile-bottom-nav button.active {
+  color: #ff4d4d;
+  transform: translateY(-2px);
+}
+.mobile-bottom-nav .nav-badge {
+  position: absolute;
+  top: 6px;
+  right: 50%;
+  transform: translateX(14px);
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: #ff4d4d;
+  color: white;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  font-family: 'Patrick Hand', cursive;
+}
+
+/* ── Bottom Sheet (Feature #2) ── */
+.bottom-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: rgba(0,0,0,0.4);
+  backdrop-filter: blur(2px);
+  animation: fade-in 200ms ease-out;
+}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.bottom-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 56;
+  max-height: 90vh;
+  overflow-y: auto;
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  animation: sheet-up 300ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.bottom-sheet .drag-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(45,45,45,0.2);
+  margin: 10px auto 6px;
+}
+html.dark .bottom-sheet .drag-handle {
+  background: rgba(224,221,213,0.3);
+}
+
+/* ── Floating Action Button (Feature #23) ── */
+.fab-button {
+  position: fixed;
+  z-index: 44;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 3px solid rgba(45,45,45,0.7);
+  background: #ff4d4d;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 4px 4px 0px rgba(45,45,45,0.15);
+  cursor: pointer;
+  transition: transform 200ms, box-shadow 200ms;
+}
+.fab-button:active {
+  transform: scale(0.92) !important;
+  box-shadow: 2px 2px 0px rgba(45,45,45,0.15);
+}
+.fab-actions {
+  position: fixed;
+  z-index: 43;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+.fab-actions button {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid rgba(45,45,45,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 2px 2px 0px rgba(45,45,45,0.1);
+  cursor: pointer;
+}
+
+/* ── Reading Progress Bar (Feature #11) ── */
+.reading-progress {
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 20;
+  background: rgba(45,45,45,0.06);
+}
+.reading-progress-fill {
+  height: 100%;
+  transition: width 100ms linear;
+  background: linear-gradient(90deg, #2d5da1, #ff4d4d);
+  border-radius: 0 2px 2px 0;
+}
+html.dark .reading-progress {
+  background: rgba(255,255,255,0.06);
+}
+
+/* ── 3D Flashcard (Feature #9) ── */
+.flashcard-3d {
+  perspective: 1000px;
+}
+.flashcard-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-style: preserve-3d;
+}
+.flashcard-inner.flipped {
+  transform: rotateY(180deg);
+}
+.flashcard-front,
+.flashcard-back {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.flashcard-back {
+  transform: rotateY(180deg);
+}
+
+/* ── Confetti (Feature #10) ── */
+.confetti-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0;
+  z-index: 100;
+  pointer-events: none;
+  overflow: visible;
+}
+.confetti-piece {
+  position: absolute;
+  top: -10px;
+  width: 10px;
+  height: 10px;
+  opacity: 0;
+  animation: confetti-fall 1.8s ease-out forwards;
+}
+@keyframes confetti-fall {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+
+/* ── Accessibility Focus Indicators (Feature #28) ── */
+*:focus-visible {
+  outline: 2px dashed #2d5da1;
+  outline-offset: 2px;
+}
+html.dark *:focus-visible {
+  outline-color: #7bb8e0;
+}
+.skip-link {
+  position: fixed;
+  top: -100%;
+  left: 4px;
+  z-index: 999;
+  padding: 8px 16px;
+  background: #2d5da1;
+  color: white;
+  font-family: 'Patrick Hand', cursive;
+  border-radius: 0 0 8px 8px;
+  transition: top 200ms;
+}
+.skip-link:focus {
+  top: 0;
+}
+
+/* ── Notification progress bar (Feature #26) ── */
+.notification-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: currentColor;
+  opacity: 0.25;
+  border-radius: 0 0 0 8px;
+}
+
+/* ── Collapsible Toolbar (Feature #16) ── */
+.toolbar-collapsible {
+  transition: transform 250ms ease, opacity 250ms ease;
+}
+.toolbar-hidden {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── Glow pulse for scroll-to-word (Feature #18) ── */
+.glow-pulse-word {
+  animation: glow-pulse-anim 1s ease-in-out 3;
+  border-radius: 3px;
+}
+@keyframes glow-pulse-anim {
+  0%, 100% { box-shadow: 0 0 4px 2px rgba(45, 93, 161, 0.3); background-color: rgba(45, 93, 161, 0.1); }
+  50% { box-shadow: 0 0 14px 6px rgba(45, 93, 161, 0.5); background-color: rgba(45, 93, 161, 0.2); }
+}
+
+/* ── Swipe sidebar hints (Feature #3) ── */
+.swipe-hint-left,
+.swipe-hint-right {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 60px;
+  border-radius: 0 4px 4px 0;
+  background: rgba(45, 93, 161, 0.15);
+  z-index: 30;
+  transition: opacity 300ms, width 300ms;
+  pointer-events: none;
+}
+.swipe-hint-left { left: 0; }
+.swipe-hint-right { right: 0; border-radius: 4px 0 0 4px; }
+.swipe-hint-left.active, .swipe-hint-right.active {
+  width: 6px;
+  background: rgba(45, 93, 161, 0.4);
+}
+
+/* ── Enhanced drag feedback (Feature #21) ── */
+.drag-ghost-enhanced {
+  transform: rotate(2deg) scale(1.04);
+  box-shadow: 8px 8px 0px rgba(45,45,45,0.12);
+  opacity: 0.95;
+}
+.drop-zone-pulse {
+  animation: drop-zone-pulse 1s ease-in-out infinite;
+}
+@keyframes drop-zone-pulse {
+  0%, 100% { border-color: rgba(45, 93, 161, 0.3); }
+  50% { border-color: rgba(45, 93, 161, 0.7); }
+}
+.drag-source-dim {
+  opacity: 0.35;
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 4px,
+    rgba(45,93,161,0.05) 4px,
+    rgba(45,93,161,0.05) 8px
+  );
+}
+
+/* ── Star burst (Feature #5) ── */
+.star-burst {
+  animation: star-burst-anim 400ms ease-out;
+}
+@keyframes star-burst-anim {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.5); filter: brightness(1.3); }
+  60% { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+
+/* ── Mobile viewport adjustments (Feature #1/24/25) ── */
+@media (max-width: 768px) {
+  /* Add bottom padding for bottom nav */
+  .has-bottom-nav {
+    padding-bottom: 64px;
+  }
+
+  /* Touch-friendly targets (Feature #24) */
+  .touch-target {
+    min-height: 48px;
+    min-width: 48px;
+  }
+
+  /* Full-width exercise options on mobile */
+  .exercise-option-mobile {
+    width: 100% !important;
+    min-height: 52px;
+    font-size: 18px;
+  }
+
+  /* Compact header (Feature #25) */
+  .header-compact {
+    transition: transform 250ms ease, height 250ms ease;
+  }
+  .header-compact.collapsed {
+    transform: translateY(-100%);
+    height: 0;
+    overflow: hidden;
+  }
+}
+
+/* ── Vocabulary section sticky headers (Feature #13) ── */
+.vocab-section-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* ── Search highlight (Feature #14) ── */
+.search-highlight {
+  background: rgba(255, 77, 77, 0.2);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+/* ── Word of Day card (Feature #12) ── */
+.wotd-card {
+  position: relative;
+  overflow: hidden;
+}
+.wotd-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(from 0deg, transparent, rgba(45,93,161,0.04), transparent, rgba(255,77,77,0.04), transparent);
+  animation: wotd-rotate 8s linear infinite;
+}
+@keyframes wotd-rotate {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Progress chart bars (Feature #20) ── */
+.chart-bar {
+  transition: height 500ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.mastery-bar {
+  transition: width 600ms cubic-bezier(0.4, 0, 0.2, 1);
+}

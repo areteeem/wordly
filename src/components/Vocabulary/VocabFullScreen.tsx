@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import {
   Search,
   X,
@@ -16,6 +16,8 @@ import {
   Copy,
   Filter,
   FileText,
+  Calendar,
+  BarChart3,
 } from 'lucide-react'
 import { useVocabularyStore } from '../../stores/vocabularyStore'
 import { useDocumentStore } from '../../stores/documentStore'
@@ -50,6 +52,9 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
   const [flashcardIndex, setFlashcardIndex] = useState(0)
   const [flashcardFlipped, setFlashcardFlipped] = useState(false)
   const [showFlashcards, setShowFlashcards] = useState(false)
+  const [groupBy, setGroupBy] = useState<'none' | 'date' | 'mastery' | 'letter'>('none')
+  const [flashcardSwipeX, setFlashcardSwipeX] = useState(0)
+  const [flashcardSwipeStart, setFlashcardSwipeStart] = useState<number | null>(null)
 
   const allTags = useMemo(() => {
     const tags = new Map<string, number>()
@@ -92,6 +97,63 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
     return map
   }, [filtered])
 
+  // Grouped sections (Feature #13)
+  const groupedSections = useMemo(() => {
+    if (groupBy === 'none') return [{ key: 'all', label: 'All Words', items: filtered }]
+
+    const sections: { key: string; label: string; items: VocabularyEntry[] }[] = []
+    const map = new Map<string, VocabularyEntry[]>()
+
+    filtered.forEach((e) => {
+      let key: string
+      if (groupBy === 'date') {
+        const d = new Date(e.createdAt)
+        const now = new Date()
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+        const week = new Date(today.getTime() - 7 * 86400000)
+        const month = new Date(today.getTime() - 30 * 86400000)
+        key = d >= today ? 'Today' : d >= week ? 'This Week' : d >= month ? 'This Month' : 'Older'
+      } else if (groupBy === 'mastery') {
+        key = e.mastery.charAt(0).toUpperCase() + e.mastery.slice(1)
+      } else {
+        key = e.word.charAt(0).toUpperCase()
+      }
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(e)
+    })
+
+    const order = groupBy === 'date'
+      ? ['Today', 'This Week', 'This Month', 'Older']
+      : groupBy === 'mastery'
+      ? ['Learning', 'Familiar', 'Mastered']
+      : Array.from(map.keys()).sort()
+
+    order.forEach((k) => {
+      if (map.has(k)) sections.push({ key: k, label: k, items: map.get(k)! })
+    })
+    // Catch any leftovers
+    map.forEach((items, key) => {
+      if (!sections.find(s => s.key === key)) sections.push({ key, label: key, items })
+    })
+
+    return sections
+  }, [filtered, groupBy])
+
+  // Search highlighting helper (Feature #14)
+  const highlightMatch = useCallback((text: string) => {
+    if (!search.trim()) return <>{text}</>
+    const q = search.trim()
+    const idx = text.toLowerCase().indexOf(q.toLowerCase())
+    if (idx === -1) return <>{text}</>
+    return (
+      <>
+        {text.slice(0, idx)}
+        <span className="search-highlight">{text.slice(idx, idx + q.length)}</span>
+        {text.slice(idx + q.length)}
+      </>
+    )
+  }, [search])
+
   const getDocName = (id: string) => documents.find((d) => d.id === id)?.title || 'Untitled'
 
   const toggleSelect = (id: string) => {
@@ -133,42 +195,106 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
     onClose()
   }
 
-  // Flashcard mode
+  // Flashcard mode (Feature #9 — 3D flip + swipe)
   if (showFlashcards && filtered.length > 0) {
     const card = filtered[flashcardIndex % filtered.length]
+    const progress = ((flashcardIndex + 1) / filtered.length) * 100
+
+    const handleFlashcardTouchStart = (e: React.TouchEvent) => {
+      setFlashcardSwipeStart(e.touches[0].clientX)
+      setFlashcardSwipeX(0)
+    }
+    const handleFlashcardTouchMove = (e: React.TouchEvent) => {
+      if (flashcardSwipeStart !== null) {
+        setFlashcardSwipeX(e.touches[0].clientX - flashcardSwipeStart)
+      }
+    }
+    const handleFlashcardTouchEnd = () => {
+      if (Math.abs(flashcardSwipeX) > 80) {
+        if (flashcardSwipeX < 0 && flashcardIndex < filtered.length - 1) {
+          setFlashcardIndex(flashcardIndex + 1)
+          setFlashcardFlipped(false)
+        } else if (flashcardSwipeX > 0 && flashcardIndex > 0) {
+          setFlashcardIndex(flashcardIndex - 1)
+          setFlashcardFlipped(false)
+        }
+      }
+      setFlashcardSwipeX(0)
+      setFlashcardSwipeStart(null)
+    }
+
     return (
-      <div className="fixed inset-0 z-50 bg-paper dark:bg-paper-dark flex flex-col items-center justify-center p-8">
+      <div className="fixed inset-0 z-50 bg-paper dark:bg-paper-dark flex flex-col items-center justify-center p-4 md:p-8">
         <div className="absolute top-4 right-4 flex items-center gap-3">
           <span className="font-body text-sm text-pencil/50">{flashcardIndex + 1} / {filtered.length}</span>
-          <button onClick={() => setShowFlashcards(false)} className="text-pencil/60 hover:text-marker">
+          <button onClick={() => setShowFlashcards(false)} className="text-pencil/60 hover:text-marker" aria-label="Close flashcards">
             <X size={24} strokeWidth={2.5} />
           </button>
         </div>
 
+        {/* Progress bar at top */}
+        <div className="absolute top-0 left-0 right-0 h-1.5 bg-erased dark:bg-erased-dark">
+          <div className="h-full bg-pen transition-all duration-300" style={{ width: `${progress}%` }} />
+        </div>
+
+        {/* 3D Flashcard */}
         <div
-          className="w-full max-w-md aspect-[3/2] bg-white dark:bg-paper-dark border-[3px] border-pencil dark:border-pencil-dark flex items-center justify-center cursor-pointer transition-transform duration-300 hover:rotate-1"
-          style={{ borderRadius: wobblyMd, boxShadow: '6px 6px 0px 0px rgba(45,45,45,0.15)' }}
+          className="flashcard-3d w-full max-w-md aspect-[3/2] cursor-pointer select-none"
           onClick={() => setFlashcardFlipped(!flashcardFlipped)}
+          onTouchStart={handleFlashcardTouchStart}
+          onTouchMove={handleFlashcardTouchMove}
+          onTouchEnd={handleFlashcardTouchEnd}
+          style={{
+            transform: `translateX(${flashcardSwipeX * 0.3}px) rotate(${flashcardSwipeX * 0.02}deg)`,
+            transition: flashcardSwipeStart !== null ? 'none' : 'transform 300ms ease-out',
+          }}
         >
-          <div className="text-center p-8">
-            <p className="font-heading text-4xl text-pencil dark:text-pencil-dark mb-2">
-              {flashcardFlipped ? card.translation : card.word}
-            </p>
-            {flashcardFlipped && card.contextSentence && (
-              <p className="font-body text-sm text-pencil/50 dark:text-pencil-dark/50 italic mt-4">
-                &ldquo;{card.contextSentence}&rdquo;
+          <div className={`flashcard-inner ${flashcardFlipped ? 'flipped' : ''}`}>
+            {/* Front (word) */}
+            <div
+              className="flashcard-front bg-white dark:bg-paper-dark border-[3px] border-pencil dark:border-pencil-dark p-8"
+              style={{ borderRadius: wobblyMd, boxShadow: '6px 6px 0px 0px rgba(45,45,45,0.15)' }}
+            >
+              <p className="font-heading text-4xl md:text-5xl text-pencil dark:text-pencil-dark mb-3">
+                {card.word}
               </p>
-            )}
-            <p className="font-body text-xs text-pencil/30 mt-4">
-              {flashcardFlipped ? 'Click to see word' : 'Click to reveal translation'}
-            </p>
+              <p className="font-body text-sm text-pencil/30">Tap to flip</p>
+              {flashcardSwipeX < -30 && <p className="font-body text-xs text-marker mt-2">← Swipe for next</p>}
+              {flashcardSwipeX > 30 && <p className="font-body text-xs text-pen mt-2">Swipe for prev →</p>}
+            </div>
+
+            {/* Back (translation) */}
+            <div
+              className="flashcard-back bg-postit border-[3px] border-pencil dark:border-pencil-dark p-8"
+              style={{ borderRadius: wobblyMd, boxShadow: '6px 6px 0px 0px rgba(45,45,45,0.15)' }}
+            >
+              <p className="font-heading text-3xl md:text-4xl text-pencil mb-2">
+                {card.translation}
+              </p>
+              {card.contextSentence && (
+                <p className="font-body text-sm text-pencil/50 italic mt-4">
+                  &ldquo;{card.contextSentence}&rdquo;
+                </p>
+              )}
+              <p className="font-body text-xs text-pencil/30 mt-2">Tap to flip back</p>
+            </div>
           </div>
         </div>
+
+        {/* Card stack visualization */}
+        {filtered.length > 1 && (
+          <div className="relative -mt-2 w-full max-w-md" aria-hidden="true">
+            <div className="h-3 mx-4 bg-erased dark:bg-erased-dark border border-pencil/10" style={{ borderRadius: '0 0 12px 12px' }} />
+            {filtered.length > 2 && (
+              <div className="h-2 mx-8 -mt-0.5 bg-erased/60 dark:bg-erased-dark/60 border border-pencil/5" style={{ borderRadius: '0 0 12px 12px' }} />
+            )}
+          </div>
+        )}
 
         <div className="flex items-center gap-4 mt-8">
           <button
             onClick={() => { setFlashcardIndex(Math.max(0, flashcardIndex - 1)); setFlashcardFlipped(false) }}
-            className="px-6 py-2 font-body text-lg border-2 border-pencil dark:border-pencil-dark bg-white dark:bg-paper-dark hover:bg-erased dark:hover:bg-erased-dark transition-colors"
+            className="px-6 py-2 font-body text-lg border-2 border-pencil dark:border-pencil-dark bg-white dark:bg-paper-dark hover:bg-erased dark:hover:bg-erased-dark transition-colors active:scale-95 touch-target"
             style={{ borderRadius: wobbly }}
             disabled={flashcardIndex === 0}
           >
@@ -176,14 +302,15 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
           </button>
           <button
             onClick={() => speakWord(card.word)}
-            className="p-2 text-pencil/60 hover:text-pen"
+            className="p-2.5 text-pencil/60 hover:text-pen touch-target"
             title="Pronounce"
+            aria-label="Pronounce word"
           >
-            <Volume2 size={20} />
+            <Volume2 size={22} />
           </button>
           <button
             onClick={() => { setFlashcardIndex(Math.min(filtered.length - 1, flashcardIndex + 1)); setFlashcardFlipped(false) }}
-            className="px-6 py-2 font-body text-lg border-2 border-pencil dark:border-pencil-dark bg-postit hover:bg-marker hover:text-white transition-colors"
+            className="px-6 py-2 font-body text-lg border-2 border-pencil dark:border-pencil-dark bg-postit hover:bg-marker hover:text-white transition-colors active:scale-95 touch-target"
             style={{ borderRadius: wobbly }}
             disabled={flashcardIndex >= filtered.length - 1}
           >
@@ -277,6 +404,20 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
           <option value="newest">Newest</option>
           <option value="oldest">Oldest</option>
           <option value="alpha">A-Z</option>
+        </select>
+
+        {/* Group by (Feature #13) */}
+        <select
+          value={groupBy}
+          onChange={(e) => setGroupBy(e.target.value as typeof groupBy)}
+          className="font-body text-sm bg-white dark:bg-paper-dark border-2 border-pencil dark:border-pencil-dark px-3 py-2 outline-none"
+          style={{ borderRadius: wobbly }}
+          title="Group vocabulary by"
+        >
+          <option value="none">No grouping</option>
+          <option value="date">By date</option>
+          <option value="mastery">By mastery</option>
+          <option value="letter">By letter</option>
         </select>
 
         {/* Filter starred */}
@@ -384,50 +525,66 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
         {filtered.length === 0 ? (
-          <p className="text-center font-body text-xl text-pencil/40 mt-16">No words match your filters</p>
+          <div className="text-center mt-16 animate-pop-in">
+            <div className="text-5xl mb-4" aria-hidden="true">🔍</div>
+            <p className="font-heading text-xl text-pencil/40 dark:text-pencil-dark/40">No words match your filters</p>
+            <p className="font-body text-sm text-pencil/30 mt-2">Try adjusting your search or filters</p>
+          </div>
         ) : viewMode === 'compact' ? (
-          /* Compact list */
+          /* Compact list with grouping */
           <div className="max-w-4xl mx-auto">
             <div className="flex items-center gap-2 mb-2">
               <input type="checkbox" checked={selectedIds.size === filtered.length} onChange={selectAll} className="w-4 h-4" />
               <span className="font-body text-xs text-pencil/40">Select all</span>
             </div>
-            {filtered.map((entry) => (
-              <div
-                key={entry.id}
-                className="flex items-center gap-3 px-3 py-1.5 border-b border-dashed border-pencil/10 dark:border-pencil-dark/10 hover:bg-erased/30 dark:hover:bg-erased-dark/30 group"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedIds.has(entry.id)}
-                  onChange={() => toggleSelect(entry.id)}
-                  className="w-4 h-4 flex-shrink-0"
-                />
-                <button onClick={() => toggleStar(entry.id)} className="flex-shrink-0">
-                  {entry.starred ? <Star size={14} className="text-yellow-500 fill-yellow-500" /> : <StarOff size={14} className="text-pencil/20" />}
-                </button>
-                <span className="font-body text-base font-bold text-pencil dark:text-pencil-dark min-w-[120px]">{entry.word}</span>
-                <span className="font-body text-base text-pen dark:text-blue-300 flex-1">{entry.translation}</span>
-                <span className={`font-body text-xs px-2 py-0.5 border ${
-                  entry.mastery === 'mastered' ? 'bg-green-100 text-green-700 border-green-300' :
-                  entry.mastery === 'familiar' ? 'bg-yellow-100 text-yellow-700 border-yellow-300' :
-                  'bg-orange-100 text-orange-700 border-orange-300'
-                }`} style={{ borderRadius: wobbly }}>
-                  {entry.mastery}
-                </span>
-                <button
-                  onClick={() => speakWord(entry.word)}
-                  className="text-pencil/30 hover:text-pen opacity-0 group-hover:opacity-100 transition-opacity"
-                  title="Pronounce"
-                >
-                  <Volume2 size={14} />
-                </button>
-                <button
-                  onClick={() => handleNavigate(entry)}
-                  className="text-pencil/30 hover:text-pen opacity-0 group-hover:opacity-100 transition-opacity text-xs font-body"
-                >
-                  Go to doc →
-                </button>
+            {groupedSections.map((section) => (
+              <div key={section.key}>
+                {groupBy !== 'none' && (
+                  <div className="vocab-section-header bg-paper/90 dark:bg-paper-dark/90 py-2 px-3 mt-3 mb-1 flex items-center gap-2 border-b-2 border-dashed border-pencil/15 dark:border-pencil-dark/15">
+                    {groupBy === 'date' && <Calendar size={14} className="text-pen" />}
+                    {groupBy === 'mastery' && <BarChart3 size={14} className="text-pen" />}
+                    <span className="font-heading text-sm text-pencil dark:text-pencil-dark">{section.label}</span>
+                    <span className="font-body text-xs text-pencil/40 ml-1">({section.items.length})</span>
+                  </div>
+                )}
+                {section.items.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-center gap-3 px-3 py-1.5 border-b border-dashed border-pencil/10 dark:border-pencil-dark/10 hover:bg-erased/30 dark:hover:bg-erased-dark/30 group transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(entry.id)}
+                      onChange={() => toggleSelect(entry.id)}
+                      className="w-4 h-4 flex-shrink-0"
+                    />
+                    <button onClick={() => toggleStar(entry.id)} className={`flex-shrink-0 ${entry.starred ? 'star-burst' : ''}`}>
+                      {entry.starred ? <Star size={14} className="text-yellow-500 fill-yellow-500" /> : <StarOff size={14} className="text-pencil/20" />}
+                    </button>
+                    <span className="font-body text-base font-bold text-pencil dark:text-pencil-dark min-w-[120px]">{highlightMatch(entry.word)}</span>
+                    <span className="font-body text-base text-pen dark:text-blue-300 flex-1">{highlightMatch(entry.translation)}</span>
+                    <span className={`font-body text-xs px-2 py-0.5 border ${
+                      entry.mastery === 'mastered' ? 'bg-green-100 text-green-700 border-green-300' :
+                      entry.mastery === 'familiar' ? 'bg-yellow-100 text-yellow-700 border-yellow-300' :
+                      'bg-orange-100 text-orange-700 border-orange-300'
+                    }`} style={{ borderRadius: wobbly }}>
+                      {entry.mastery}
+                    </span>
+                    <button
+                      onClick={() => speakWord(entry.word)}
+                      className="text-pencil/30 hover:text-pen opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Pronounce"
+                    >
+                      <Volume2 size={14} />
+                    </button>
+                    <button
+                      onClick={() => handleNavigate(entry)}
+                      className="text-pencil/30 hover:text-pen opacity-0 group-hover:opacity-100 transition-opacity text-xs font-body"
+                    >
+                      Go to doc →
+                    </button>
+                  </div>
+                ))}
               </div>
             ))}
           </div>
@@ -445,16 +602,16 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
                   {docEntries.map((entry) => (
                     <div
                       key={entry.id}
-                      className="bg-white dark:bg-paper-dark border-2 border-pencil dark:border-pencil-dark p-4 transition-transform duration-100 hover:rotate-[0.5deg]"
+                      className="bg-white dark:bg-paper-dark border-2 border-pencil dark:border-pencil-dark p-4 transition-all duration-150 hover:rotate-[0.5deg] hover:-translate-y-0.5 active:scale-[0.98]"
                       style={{ borderRadius: wobblyMd, boxShadow: '3px 3px 0px 0px rgba(45,45,45,0.1)' }}
                     >
                       <div className="flex items-start justify-between mb-1">
-                        <h4 className="font-heading text-xl text-pencil dark:text-pencil-dark">{entry.word}</h4>
-                        <button onClick={() => toggleStar(entry.id)}>
+                        <h4 className="font-heading text-xl text-pencil dark:text-pencil-dark">{highlightMatch(entry.word)}</h4>
+                        <button onClick={() => toggleStar(entry.id)} className={entry.starred ? 'star-burst' : ''}>
                           {entry.starred ? <Star size={16} className="text-yellow-500 fill-yellow-500" /> : <StarOff size={16} className="text-pencil/20" />}
                         </button>
                       </div>
-                      <p className="font-body text-lg text-pen dark:text-blue-300 mb-2">{entry.translation}</p>
+                      <p className="font-body text-lg text-pen dark:text-blue-300 mb-2">{highlightMatch(entry.translation)}</p>
                       {entry.contextSentence && (
                         <p className="font-body text-xs text-pencil/50 italic mb-2 border-l-2 border-dashed border-pencil/20 pl-2">
                           &ldquo;{entry.contextSentence}&rdquo;
@@ -503,8 +660,8 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
                         {entry.starred ? <Star size={14} className="text-yellow-500 fill-yellow-500" /> : <StarOff size={14} className="text-pencil/20" />}
                       </button>
                     </td>
-                    <td className="py-2 font-body font-bold text-pencil dark:text-pencil-dark">{entry.word}</td>
-                    <td className="py-2 font-body text-pen dark:text-blue-300">{entry.translation}</td>
+                    <td className="py-2 font-body font-bold text-pencil dark:text-pencil-dark">{highlightMatch(entry.word)}</td>
+                    <td className="py-2 font-body text-pen dark:text-blue-300">{highlightMatch(entry.translation)}</td>
                     <td className="py-2 font-body text-xs text-pencil/50 max-w-[200px] truncate">{entry.contextSentence}</td>
                     <td className="py-2">
                       <div className="flex gap-1 flex-wrap">

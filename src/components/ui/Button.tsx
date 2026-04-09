@@ -14,7 +14,7 @@ export function Button({
   ...props
 }: ButtonProps) {
   const base =
-    'font-body cursor-pointer border-pencil dark:border-pencil-dark transition-all duration-100 btn-press select-none inline-flex items-center justify-center gap-2'
+    'font-body cursor-pointer border-pencil dark:border-pencil-dark transition-all duration-100 btn-press select-none inline-flex items-center justify-center gap-2 active:scale-[0.96] ripple-container'
 
   const variants = {
     primary:

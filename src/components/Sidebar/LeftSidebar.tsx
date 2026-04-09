@@ -184,7 +184,7 @@ export function LeftSidebar() {
         <DragOverlay>
           {draggedDocument ? (
             <div
-              className="flex items-center gap-2 border-2 border-pencil bg-white px-3 py-2 font-body text-base text-pencil shadow-hard dark:border-pencil-dark dark:bg-paper-dark dark:text-pencil-dark"
+              className="flex items-center gap-2 border-2 border-pencil bg-white px-3 py-2 font-body text-base text-pencil shadow-hard dark:border-pencil-dark dark:bg-paper-dark dark:text-pencil-dark drag-ghost-enhanced"
               style={{ borderRadius: wobbly }}
             >
               <GripVertical size={12} strokeWidth={2} className="text-pencil/30" />
@@ -287,7 +287,7 @@ function FolderRow({
         isActive
           ? 'bg-postit border-2 border-pencil dark:border-pencil-dark'
           : 'hover:bg-erased/50 dark:hover:bg-erased-dark/50 border-2 border-transparent'
-      } ${showDropState ? 'bg-pen/10 dark:bg-pen/20 border-pen ring-2 ring-pen/30' : ''}`}
+      } ${showDropState ? 'bg-pen/10 dark:bg-pen/20 border-pen ring-2 ring-pen/30 drop-zone-pulse' : ''}`}
       style={{ borderRadius: wobbly }}
       onClick={onClick}
     >
@@ -380,7 +380,7 @@ function DraggableDocumentRow({
         isActive
           ? 'text-pen font-bold'
           : 'text-pencil/70 dark:text-pencil-dark/70 hover:text-pencil dark:hover:text-pencil-dark'
-      } ${isDragging ? 'scale-95 opacity-30' : 'hover:bg-erased/30 dark:hover:bg-erased-dark/30'}`}
+      } ${isDragging ? 'scale-95 opacity-30 drag-source-dim' : 'hover:bg-erased/30 dark:hover:bg-erased-dark/30'}`}
       onClick={onOpen}
     >
       <GripVertical size={12} strokeWidth={2} className="text-pencil/30 flex-shrink-0" />
