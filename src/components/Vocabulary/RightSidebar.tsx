@@ -25,7 +25,8 @@ import { useVocabularyStore } from '../../stores/vocabularyStore'
 import { useDocumentStore } from '../../stores/documentStore'
 import { useFolderStore } from '../../stores/folderStore'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { Input } from '../ui/Input'
+import { Input, TextArea } from '../ui/Input'
+import { Select } from '../ui/Select'
 import { TagBadge } from '../ui/TagBadge'
 import { exportCSV, exportTable, exportText, downloadFile } from '../../services/export'
 import { translateWord } from '../../services/translation'
@@ -38,6 +39,8 @@ export function RightSidebar() {
   const updateEntry = useVocabularyStore((s) => s.updateEntry)
   const deleteEntry = useVocabularyStore((s) => s.deleteEntry)
   const toggleStar = useVocabularyStore((s) => s.toggleStar)
+  const getDueFlashcards = useVocabularyStore((s) => s.getDueFlashcards)
+  const getRecommendations = useVocabularyStore((s) => s.getRecommendations)
   const activeDocumentId = useDocumentStore((s) => s.activeDocumentId)
   const documents = useDocumentStore((s) => s.documents)
   const setActiveDocument = useDocumentStore((s) => s.setActiveDocument)
@@ -66,6 +69,8 @@ export function RightSidebar() {
   const translationInputRef = useRef<HTMLInputElement>(null)
 
   const activeDoc = activeDocumentId ? documents.find((d) => d.id === activeDocumentId) : null
+  const dueCards = getDueFlashcards(activeDocumentId || undefined, 6)
+  const recommendations = getRecommendations(activeDocumentId || undefined, 4)
 
   // Debounced auto-translate for manual add
   useEffect(() => {
@@ -88,12 +93,12 @@ export function RightSidebar() {
 
     // Apply scope filter
     if (vocabScope === 'file' && activeDocumentId) {
-      result = result.filter((e) => e.documentId === activeDocumentId)
+      result = result.filter((e) => e.occurrences.some((occurrence) => occurrence.documentId === activeDocumentId))
     } else if (vocabScope === 'folder' && activeDoc) {
       const folderDocIds = documents
         .filter((d) => d.folderId === activeDoc.folderId)
         .map((d) => d.id)
-      result = result.filter((e) => folderDocIds.includes(e.documentId))
+      result = result.filter((e) => e.occurrences.some((occurrence) => folderDocIds.includes(occurrence.documentId)))
     }
     // vocabScope === 'all' -> no filter
 
@@ -124,7 +129,7 @@ export function RightSidebar() {
     }
 
     return result
-  }, [entries, activeDocumentId, search, filterTag, sortBy])
+  }, [entries, activeDocumentId, activeDoc, documents, search, filterTag, sortBy, vocabScope])
 
   const allTags = useMemo(() => {
     const tags = new Set<string>()
@@ -155,6 +160,7 @@ export function RightSidebar() {
     addEntry({
       word: newWord.trim(),
       translation: newTranslation.trim(),
+      translationSource: newTranslation.trim() ? 'manual' : 'none',
       contextSentence: '',
       notes: '',
       tags: [],
@@ -192,6 +198,7 @@ export function RightSidebar() {
         addEntry({
           word,
           translation,
+          translationSource: translation ? 'manual' : 'none',
           contextSentence: '',
           notes: '',
           tags: ['imported'],
@@ -282,16 +289,16 @@ export function RightSidebar() {
           </div>
 
           {/* Sort */}
-          <select
+          <Select
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-            className="font-body text-sm bg-white dark:bg-paper-dark border-2 border-pencil dark:border-pencil-dark px-2 py-1 outline-none"
-            style={{ borderRadius: wobbly }}
-          >
-            <option value="newest">Newest</option>
-            <option value="oldest">Oldest</option>
-            <option value="alpha">A-Z</option>
-          </select>
+            onChange={(value) => setSortBy(value as typeof sortBy)}
+            options={[
+              { value: 'newest', label: 'Newest first' },
+              { value: 'oldest', label: 'Oldest first' },
+              { value: 'alpha', label: 'A-Z' },
+            ]}
+            className="min-w-[140px]"
+          />
 
           {/* Export */}
           <div className="ml-auto flex gap-1">
@@ -334,6 +341,33 @@ export function RightSidebar() {
             ))}
           </div>
         )}
+
+        {(dueCards.length > 0 || recommendations.length > 0) && (
+          <div className="mt-3 space-y-2">
+            {dueCards.length > 0 && (
+              <div className="rounded-[18px] border border-pencil/15 bg-postit/50 px-3 py-2 dark:border-pencil-dark/15 dark:bg-erased-dark/50" style={{ borderRadius: wobblyMd }}>
+                <p className="font-heading text-sm text-pencil dark:text-pencil-dark">Due Now</p>
+                <p className="font-body text-xs text-pencil/55 dark:text-pencil-dark/55">
+                  {dueCards.length} review card{dueCards.length !== 1 ? 's' : ''} ready for this scope.
+                </p>
+              </div>
+            )}
+
+            {recommendations.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {recommendations.slice(0, 3).map((entry) => (
+                  <span
+                    key={entry.id}
+                    className="inline-flex items-center gap-1 rounded-full border border-pencil/15 bg-white px-2 py-1 font-body text-xs text-pencil/70 dark:border-pencil-dark/15 dark:bg-paper-dark dark:text-pencil-dark/70"
+                  >
+                    <Lightbulb size={11} strokeWidth={2.5} className="text-pen" />
+                    {entry.word}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Manual add form */}
@@ -344,13 +378,11 @@ export function RightSidebar() {
               <Check size={14} strokeWidth={3} /> Added!
             </div>
           )}
-          <input
-            type="text"
+          <Input
             value={newWord}
             onChange={(e) => setNewWord(e.target.value)}
             placeholder="Word or phrase..."
-            className="w-full font-body text-sm bg-white dark:bg-paper-dark border-2 border-pencil dark:border-pencil-dark px-3 py-1.5 outline-none text-pencil dark:text-pencil-dark"
-            style={{ borderRadius: wobbly }}
+            className="py-1.5 text-sm"
             autoFocus
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
@@ -360,14 +392,12 @@ export function RightSidebar() {
             }}
           />
           <div className="relative">
-            <input
+            <Input
               ref={translationInputRef}
-              type="text"
               value={newTranslation}
               onChange={(e) => setNewTranslation(e.target.value)}
               placeholder="Translation..."
-              className="w-full font-body text-sm bg-white dark:bg-paper-dark border-2 border-pencil dark:border-pencil-dark px-3 py-1.5 outline-none text-pen dark:text-blue-300"
-              style={{ borderRadius: wobbly }}
+              className="py-1.5 text-sm text-pen dark:text-blue-300"
               onKeyDown={(e) => e.key === 'Enter' && handleAddManualWord()}
             />
             {sugLoading && (
@@ -411,12 +441,11 @@ export function RightSidebar() {
           <p className="font-body text-xs text-pencil/60 dark:text-pencil-dark/60">
             Paste words, one per line. Formats: <code>word — translation</code>, <code>word - translation</code>, <code>word,translation</code>
           </p>
-          <textarea
+          <TextArea
             value={importText}
             onChange={(e) => setImportText(e.target.value)}
             placeholder={"apple — яблуко\ndog — собака\ncat — кіт"}
-            className="w-full font-body text-sm bg-white dark:bg-paper-dark border-2 border-pencil dark:border-pencil-dark px-3 py-2 outline-none text-pencil dark:text-pencil-dark resize-none"
-            style={{ borderRadius: wobbly }}
+            className="px-3 py-2 text-sm text-pencil dark:text-pencil-dark"
             rows={5}
           />
           <div className="flex gap-2">

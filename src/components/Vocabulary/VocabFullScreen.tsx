@@ -24,7 +24,10 @@ import { useDocumentStore } from '../../stores/documentStore'
 import { useFolderStore } from '../../stores/folderStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { exportCSV, exportText, downloadFile } from '../../services/export'
+import { buildFlashcardPrompts } from '../../lib/vocabulary'
 import { wobbly, wobblyMd } from '../../lib/utils'
+import { Input } from '../ui/Input'
+import { Select } from '../ui/Select'
 import { TagBadge } from '../ui/TagBadge'
 import type { VocabularyEntry, VocabViewMode } from '../../types'
 
@@ -35,6 +38,8 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
   const toggleStar = useVocabularyStore((s) => s.toggleStar)
   const undoDelete = useVocabularyStore((s) => s.undoDelete)
   const lastDeleted = useVocabularyStore((s) => s.lastDeleted)
+  const reviewEntry = useVocabularyStore((s) => s.reviewEntry)
+  const getRecommendations = useVocabularyStore((s) => s.getRecommendations)
   const documents = useDocumentStore((s) => s.documents)
   const setActiveDocument = useDocumentStore((s) => s.setActiveDocument)
   const setScrollToPosition = useDocumentStore((s) => s.setScrollToPosition)
@@ -76,7 +81,9 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
     if (filterTag) result = result.filter((e) => e.tags.includes(filterTag))
     if (filterStarred) result = result.filter((e) => e.starred)
     if (filterMastery) result = result.filter((e) => e.mastery === filterMastery)
-    if (filterDocId) result = result.filter((e) => e.documentId === filterDocId)
+    if (filterDocId) {
+      result = result.filter((e) => e.occurrences.some((occurrence) => occurrence.documentId === filterDocId))
+    }
 
     switch (sortBy) {
       case 'newest': result = [...result].sort((a, b) => b.createdAt - a.createdAt); break
@@ -85,6 +92,20 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
     }
     return result
   }, [entries, search, filterTag, filterStarred, filterMastery, filterDocId, sortBy])
+
+  const flashcards = useMemo(() => {
+    const dueOnly = filtered.some((entry) => entry.srs.dueAt <= Date.now() || entry.srs.reviewCount === 0)
+    return buildFlashcardPrompts(filtered, {
+      documentId: filterDocId || undefined,
+      limit: 48,
+      dueOnly,
+    })
+  }, [filtered, filterDocId])
+
+  const recommendations = useMemo(
+    () => getRecommendations(filterDocId || undefined, 6),
+    [filterDocId, getRecommendations],
+  )
 
   // Group by document
   const grouped = useMemo(() => {
@@ -188,17 +209,23 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
   }
 
   const handleNavigate = (entry: VocabularyEntry) => {
-    setActiveDocument(entry.documentId)
-    if (entry.positionInDoc > 0) {
-      setTimeout(() => setScrollToPosition(entry.positionInDoc), 100)
+    const targetOccurrence = filterDocId
+      ? entry.occurrences.find((occurrence) => occurrence.documentId === filterDocId)
+      : entry.occurrences[0]
+    const targetDocumentId = targetOccurrence?.documentId || entry.documentId
+    const targetPosition = targetOccurrence?.positionInDoc || entry.positionInDoc
+
+    setActiveDocument(targetDocumentId)
+    if (targetPosition > 0) {
+      setTimeout(() => setScrollToPosition(targetPosition), 100)
     }
     onClose()
   }
 
-  // Flashcard mode (Feature #9 — 3D flip + swipe)
-  if (showFlashcards && filtered.length > 0) {
-    const card = filtered[flashcardIndex % filtered.length]
-    const progress = ((flashcardIndex + 1) / filtered.length) * 100
+  // Flashcard mode (Feature #9 — now powered by the shared SRS scheduler)
+  if (showFlashcards && flashcards.length > 0) {
+    const card = flashcards[flashcardIndex % flashcards.length]
+    const progress = ((flashcardIndex + 1) / flashcards.length) * 100
 
     const handleFlashcardTouchStart = (e: React.TouchEvent) => {
       setFlashcardSwipeStart(e.touches[0].clientX)
@@ -211,7 +238,7 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
     }
     const handleFlashcardTouchEnd = () => {
       if (Math.abs(flashcardSwipeX) > 80) {
-        if (flashcardSwipeX < 0 && flashcardIndex < filtered.length - 1) {
+        if (flashcardSwipeX < 0 && flashcardIndex < flashcards.length - 1) {
           setFlashcardIndex(flashcardIndex + 1)
           setFlashcardFlipped(false)
         } else if (flashcardSwipeX > 0 && flashcardIndex > 0) {
@@ -223,10 +250,17 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
       setFlashcardSwipeStart(null)
     }
 
+    const submitReview = (grade: 'again' | 'hard' | 'good' | 'easy') => {
+      reviewEntry(card.entryId, grade, card.type)
+      setFlashcardFlipped(false)
+      setFlashcardIndex((current) => Math.min(current + 1, Math.max(0, flashcards.length - 1)))
+      notify(`Reviewed ${card.answer}`)
+    }
+
     return (
       <div className="fixed inset-0 z-50 bg-paper dark:bg-paper-dark flex flex-col items-center justify-center p-4 md:p-8">
         <div className="absolute top-4 right-4 flex items-center gap-3">
-          <span className="font-body text-sm text-pencil/50">{flashcardIndex + 1} / {filtered.length}</span>
+          <span className="font-body text-sm text-pencil/50">{flashcardIndex + 1} / {flashcards.length}</span>
           <button onClick={() => setShowFlashcards(false)} className="text-pencil/60 hover:text-marker" aria-label="Close flashcards">
             <X size={24} strokeWidth={2.5} />
           </button>
@@ -255,8 +289,11 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
               className="flashcard-front bg-white dark:bg-paper-dark border-[3px] border-pencil dark:border-pencil-dark p-8"
               style={{ borderRadius: wobblyMd, boxShadow: '6px 6px 0px 0px rgba(45,45,45,0.15)' }}
             >
+              <p className="font-body text-xs uppercase tracking-[0.18em] text-pencil/40 dark:text-pencil-dark/40 mb-3">
+                {card.type.replace(/_/g, ' ')}
+              </p>
               <p className="font-heading text-4xl md:text-5xl text-pencil dark:text-pencil-dark mb-3">
-                {card.word}
+                {card.prompt}
               </p>
               <p className="font-body text-sm text-pencil/30">Tap to flip</p>
               {flashcardSwipeX < -30 && <p className="font-body text-xs text-marker mt-2">← Swipe for next</p>}
@@ -269,11 +306,11 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
               style={{ borderRadius: wobblyMd, boxShadow: '6px 6px 0px 0px rgba(45,45,45,0.15)' }}
             >
               <p className="font-heading text-3xl md:text-4xl text-pencil mb-2">
-                {card.translation}
+                {card.answer}
               </p>
-              {card.contextSentence && (
+              {card.exampleSentence && (
                 <p className="font-body text-sm text-pencil/50 italic mt-4">
-                  &ldquo;{card.contextSentence}&rdquo;
+                  &ldquo;{card.exampleSentence}&rdquo;
                 </p>
               )}
               <p className="font-body text-xs text-pencil/30 mt-2">Tap to flip back</p>
@@ -282,10 +319,10 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Card stack visualization */}
-        {filtered.length > 1 && (
+        {flashcards.length > 1 && (
           <div className="relative -mt-2 w-full max-w-md" aria-hidden="true">
             <div className="h-3 mx-4 bg-erased dark:bg-erased-dark border border-pencil/10" style={{ borderRadius: '0 0 12px 12px' }} />
-            {filtered.length > 2 && (
+            {flashcards.length > 2 && (
               <div className="h-2 mx-8 -mt-0.5 bg-erased/60 dark:bg-erased-dark/60 border border-pencil/5" style={{ borderRadius: '0 0 12px 12px' }} />
             )}
           </div>
@@ -301,7 +338,7 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
             ← Previous
           </button>
           <button
-            onClick={() => speakWord(card.word)}
+            onClick={() => speakWord(card.type === 'word_to_meaning' ? card.prompt : card.answer)}
             className="p-2.5 text-pencil/60 hover:text-pen touch-target"
             title="Pronounce"
             aria-label="Pronounce word"
@@ -309,29 +346,30 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
             <Volume2 size={22} />
           </button>
           <button
-            onClick={() => { setFlashcardIndex(Math.min(filtered.length - 1, flashcardIndex + 1)); setFlashcardFlipped(false) }}
+            onClick={() => { setFlashcardIndex(Math.min(flashcards.length - 1, flashcardIndex + 1)); setFlashcardFlipped(false) }}
             className="px-6 py-2 font-body text-lg border-2 border-pencil dark:border-pencil-dark bg-postit hover:bg-marker hover:text-white transition-colors active:scale-95 touch-target"
             style={{ borderRadius: wobbly }}
-            disabled={flashcardIndex >= filtered.length - 1}
+            disabled={flashcardIndex >= flashcards.length - 1}
           >
             Next →
           </button>
         </div>
 
-        {/* Mastery buttons */}
+        {/* Review grading */}
         <div className="flex items-center gap-3 mt-6">
-          {(['learning', 'familiar', 'mastered'] as const).map((level) => (
+          {([
+            { grade: 'again' as const, label: 'Again' },
+            { grade: 'hard' as const, label: 'Hard' },
+            { grade: 'good' as const, label: 'Good' },
+            { grade: 'easy' as const, label: 'Easy' },
+          ]).map((button) => (
             <button
-              key={level}
-              onClick={() => updateEntry(card.id, { mastery: level })}
-              className={`px-4 py-1.5 font-body text-sm border-2 border-pencil dark:border-pencil-dark transition-colors ${
-                card.mastery === level
-                  ? level === 'mastered' ? 'bg-green-400 text-white' : level === 'familiar' ? 'bg-yellow-400' : 'bg-orange-400 text-white'
-                  : 'bg-white dark:bg-paper-dark hover:bg-erased'
-              }`}
+              key={button.grade}
+              onClick={() => submitReview(button.grade)}
+              className="px-4 py-1.5 font-body text-sm border-2 border-pencil dark:border-pencil-dark bg-white dark:bg-paper-dark hover:bg-erased dark:hover:bg-erased-dark transition-colors"
               style={{ borderRadius: wobbly }}
             >
-              {level.charAt(0).toUpperCase() + level.slice(1)}
+              {button.label}
             </button>
           ))}
         </div>
@@ -358,12 +396,11 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
         {/* Search */}
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-pencil/40" />
-          <input
+          <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search all words..."
-            className="w-full font-body text-sm bg-white dark:bg-paper-dark border-2 border-pencil dark:border-pencil-dark pl-9 pr-3 py-2 outline-none"
-            style={{ borderRadius: wobbly }}
+            className="py-2 pl-9 pr-3 text-sm"
           />
         </div>
 
@@ -395,30 +432,27 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
         </button>
 
         {/* Sort */}
-        <select
+        <Select
           value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-          className="font-body text-sm bg-white dark:bg-paper-dark border-2 border-pencil dark:border-pencil-dark px-3 py-2 outline-none"
-          style={{ borderRadius: wobbly }}
-        >
-          <option value="newest">Newest</option>
-          <option value="oldest">Oldest</option>
-          <option value="alpha">A-Z</option>
-        </select>
+          onChange={(value) => setSortBy(value as typeof sortBy)}
+          options={[
+            { value: 'newest', label: 'Newest first' },
+            { value: 'oldest', label: 'Oldest first' },
+            { value: 'alpha', label: 'A-Z' },
+          ]}
+        />
 
         {/* Group by (Feature #13) */}
-        <select
+        <Select
           value={groupBy}
-          onChange={(e) => setGroupBy(e.target.value as typeof groupBy)}
-          className="font-body text-sm bg-white dark:bg-paper-dark border-2 border-pencil dark:border-pencil-dark px-3 py-2 outline-none"
-          style={{ borderRadius: wobbly }}
-          title="Group vocabulary by"
-        >
-          <option value="none">No grouping</option>
-          <option value="date">By date</option>
-          <option value="mastery">By mastery</option>
-          <option value="letter">By letter</option>
-        </select>
+          onChange={(value) => setGroupBy(value as typeof groupBy)}
+          options={[
+            { value: 'none', label: 'No grouping' },
+            { value: 'date', label: 'By date' },
+            { value: 'mastery', label: 'By mastery' },
+            { value: 'letter', label: 'By letter' },
+          ]}
+        />
 
         {/* Filter starred */}
         <button
@@ -431,30 +465,27 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
         </button>
 
         {/* Filter mastery */}
-        <select
+        <Select
           value={filterMastery}
-          onChange={(e) => setFilterMastery(e.target.value)}
-          className="font-body text-sm bg-white dark:bg-paper-dark border-2 border-pencil dark:border-pencil-dark px-3 py-2 outline-none"
-          style={{ borderRadius: wobbly }}
-        >
-          <option value="">All levels</option>
-          <option value="learning">Learning</option>
-          <option value="familiar">Familiar</option>
-          <option value="mastered">Mastered</option>
-        </select>
+          onChange={setFilterMastery}
+          options={[
+            { value: '', label: 'All levels' },
+            { value: 'learning', label: 'Learning' },
+            { value: 'familiar', label: 'Familiar' },
+            { value: 'mastered', label: 'Mastered' },
+          ]}
+        />
 
         {/* Filter by document */}
-        <select
+        <Select
           value={filterDocId}
-          onChange={(e) => setFilterDocId(e.target.value)}
-          className="font-body text-sm bg-white dark:bg-paper-dark border-2 border-pencil dark:border-pencil-dark px-3 py-2 outline-none max-w-[160px]"
-          style={{ borderRadius: wobbly }}
-        >
-          <option value="">All documents</option>
-          {documents.map((d) => (
-            <option key={d.id} value={d.id}>{d.title || 'Untitled'}</option>
-          ))}
-        </select>
+          onChange={setFilterDocId}
+          options={[
+            { value: '', label: 'All documents' },
+            ...documents.map((document) => ({ value: document.id, label: document.title || 'Untitled' })),
+          ]}
+          className="max-w-[220px]"
+        />
 
         {/* Export */}
         <button
@@ -469,6 +500,24 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
           <Download size={16} strokeWidth={2.5} />
         </button>
       </div>
+
+      {(flashcards.length > 0 || recommendations.length > 0) && (
+        <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-pencil/10 dark:border-pencil-dark/10">
+          {flashcards.length > 0 && (
+            <span className="rounded-full bg-postit px-3 py-1 font-body text-xs text-pencil dark:bg-erased-dark dark:text-pencil-dark">
+              {flashcards.length} review card{flashcards.length !== 1 ? 's' : ''} ready
+            </span>
+          )}
+          {recommendations.slice(0, 4).map((entry) => (
+            <span
+              key={entry.id}
+              className="rounded-full border border-pencil/15 bg-white px-3 py-1 font-body text-xs text-pencil/70 dark:border-pencil-dark/15 dark:bg-paper-dark dark:text-pencil-dark/70"
+            >
+              {entry.word}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Tags bar */}
       {allTags.length > 0 && (
@@ -672,16 +721,16 @@ export function VocabFullScreen({ onClose }: { onClose: () => void }) {
                       </div>
                     </td>
                     <td className="py-2">
-                      <select
+                      <Select
                         value={entry.mastery}
-                        onChange={(e) => updateEntry(entry.id, { mastery: e.target.value as VocabularyEntry['mastery'] })}
-                        className="font-body text-xs bg-transparent border border-pencil/20 px-1 py-0.5 outline-none"
-                        style={{ borderRadius: '4px' }}
-                      >
-                        <option value="learning">Learning</option>
-                        <option value="familiar">Familiar</option>
-                        <option value="mastered">Mastered</option>
-                      </select>
+                        onChange={(value) => updateEntry(entry.id, { mastery: value as VocabularyEntry['mastery'] })}
+                        options={[
+                          { value: 'learning', label: 'Learning' },
+                          { value: 'familiar', label: 'Familiar' },
+                          { value: 'mastered', label: 'Mastered' },
+                        ]}
+                        className="min-w-[130px]"
+                      />
                     </td>
                     <td className="py-2">
                       <button

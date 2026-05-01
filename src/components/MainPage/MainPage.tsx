@@ -106,12 +106,7 @@ export function MainPage() {
   // Spaced repetition due count (Feature #29)
   const dueCount = useMemo(() => {
     const now = Date.now()
-    return entries.filter(e => {
-      const daysSince = (now - e.updatedAt) / 86400000
-      if (e.mastery === 'learning') return daysSince >= 1
-      if (e.mastery === 'familiar') return daysSince >= 3
-      return daysSince >= 14
-    }).length
+    return entries.filter((entry) => entry.srs.dueAt <= now).length
   }, [entries])
 
   const stats = [
@@ -345,7 +340,9 @@ export function MainPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {recentDocs.map((doc) => {
                 const folder = folders.find((f) => f.id === doc.folderId)
-                const wordCount = entries.filter((e) => e.documentId === doc.id).length
+                const wordCount = entries.filter((entry) =>
+                  entry.occurrences.some((occurrence) => occurrence.documentId === doc.id),
+                ).length
                 const preview = doc.content
                   ? doc.content.replace(/<[^>]*>/g, '').substring(0, 80)
                   : 'Empty document'
@@ -398,7 +395,7 @@ export function MainPage() {
               </Button>
               <div className="font-body text-sm text-pencil/40 space-y-1">
                 <p>💡 Highlight words in your text to add them to vocabulary</p>
-                <p>🎯 Practice with 6 different exercise types</p>
+                <p>🎯 Practice with 10 different exercise types</p>
                 <p>📊 Track your learning progress over time</p>
               </div>
             </div>

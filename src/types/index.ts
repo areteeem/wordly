@@ -1,7 +1,75 @@
 // ── Core Data Types ──
 
+export type VocabularyMastery = 'learning' | 'familiar' | 'mastered'
+export type VocabularyEntryKind = 'word' | 'phrase'
+export type TranslationSource = 'google' | 'mymemory' | 'manual' | 'none'
+export type FlashcardCardType = 'word_to_meaning' | 'meaning_to_word' | 'context_to_word'
+export type ReviewGrade = 'again' | 'hard' | 'good' | 'easy'
+
+export interface VocabularyOccurrence {
+  id: string
+  documentId: string
+  contextSentence: string
+  positionInDoc: number
+  capturedText: string
+  createdAt: number
+  updatedAt: number
+}
+
+export interface VocabularySrsState {
+  easeFactor: number
+  intervalDays: number
+  repetition: number
+  dueAt: number
+  lastReviewedAt: number | null
+  reviewCount: number
+  lapses: number
+}
+
+export interface VocabularyReviewEvent {
+  id: string
+  cardType: FlashcardCardType
+  grade: ReviewGrade
+  reviewedAt: number
+  dueAt: number
+  strengthAfter: number
+}
+
+export interface VocabularyRelations {
+  semanticGroup: string | null
+  synonyms: string[]
+  antonyms: string[]
+}
+
 export interface VocabularyEntry {
   id: string
+  word: string
+  normalizedWord: string
+  kind: VocabularyEntryKind
+  translation: string
+  translationSource: TranslationSource
+  contextSentence: string
+  notes: string
+  tags: string[]
+  positionInDoc: number
+  documentId: string
+  occurrences: VocabularyOccurrence[]
+  starred: boolean
+  mastery: VocabularyMastery
+  strengthScore: number
+  difficultyScore: number
+  frequencyScore: number
+  mistakeCount: number
+  srs: VocabularySrsState
+  relations: VocabularyRelations
+  reviewHistory: VocabularyReviewEvent[]
+  version: number
+  lastSyncedAt: number | null
+  createdAt: number
+  updatedAt: number
+}
+
+export interface VocabularyEntryInput {
   word: string
   translation: string
   contextSentence: string
@@ -9,10 +77,27 @@ export interface VocabularyEntry {
   tags: string[]
   positionInDoc: number
   documentId: string
-  starred: boolean
-  mastery: 'learning' | 'familiar' | 'mastered'
-  createdAt: number
+  translationSource?: TranslationSource
+}
+
+export interface FlashcardPrompt {
+  id: string
+  entryId: string
+  type: FlashcardCardType
+  prompt: string
+  answer: string
+  exampleSentence: string
+  dueAt: number
+  strengthScore: number
+  difficultyScore: number
+}
+
+export interface VocabularySnapshot {
+  schemaVersion: number
+  version: number
   updatedAt: number
+  deviceId: string
+  entries: VocabularyEntry[]
 }
 
 export interface Document {

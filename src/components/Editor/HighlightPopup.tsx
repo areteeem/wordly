@@ -34,6 +34,7 @@ export function HighlightPopup({
   const notify = useSettingsStore((s) => s.notify)
   const translateTo = useSettingsStore((s) => s.settings.translateTo)
   const translateFrom = useSettingsStore((s) => s.settings.translateFrom)
+  const vocabScope = useSettingsStore((s) => s.settings.vocabScope)
   const autoAccept = useSettingsStore((s) => s.settings.autoAcceptTranslation)
   const requireConfirmation = useSettingsStore((s) => s.settings.requireConfirmation)
   const revealTranslation = useSettingsStore((s) => s.settings.revealTranslation)
@@ -116,7 +117,7 @@ export function HighlightPopup({
 
   const handleAdd = () => {
     const wordToAdd = editedWord.trim() || word
-    if (hasDuplicate(wordToAdd, documentId)) {
+    if (hasDuplicate(wordToAdd, documentId, vocabScope)) {
       notify('This word is already in your vocabulary!', 'info')
       onDone()
       return
@@ -129,6 +130,7 @@ export function HighlightPopup({
     addEntry({
       word: wordToAdd,
       translation,
+      translationSource: translation ? (translationSource as 'google' | 'mymemory' | 'none') : 'manual',
       contextSentence: sentence,
       notes: '',
       tags: [],
